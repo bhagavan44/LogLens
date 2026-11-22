@@ -14,6 +14,8 @@ namespace LogLens.App;
 /// <summary>The main window: title bar, menu, message bar, and either the empty state or the open log. State lives in <see cref="MainViewModel"/>.</summary>
 public sealed partial class MainWindow : Window
 {
+    private LogView? _logView;
+
     public MainWindow(MainViewModel viewModel)
     {
         ViewModel = viewModel;
@@ -52,7 +54,8 @@ public sealed partial class MainWindow : Window
         switch (e.PropertyName)
         {
             case nameof(MainViewModel.CurrentLog):
-                LogHost.Content = ViewModel.CurrentLog is { } log ? new LogView(log) : null;
+                _logView = ViewModel.CurrentLog is { } log ? new LogView(log) : null;
+                LogHost.Content = _logView;
                 break;
             case nameof(MainViewModel.LoadProgress):
                 LoadingProgress.Value = ViewModel.LoadProgress;
@@ -67,6 +70,11 @@ public sealed partial class MainWindow : Window
         Title = ViewModel.WindowTitle;
         TitleText.Text = ViewModel.WindowTitle;
         CloseItem.IsEnabled = ViewModel.HasLog;
+        foreach (var item in new[] { FindItem, FindNextItem, FindPreviousItem, FilterItem, ClearFiltersItem, GoToItem, NextProblemItem, PreviousProblemItem })
+        {
+            item.IsEnabled = ViewModel.HasLog;
+        }
+
         EmptyState.Visibility = ViewModel.ShowEmptyState ? Visibility.Visible : Visibility.Collapsed;
         LoadingOverlay.Visibility = ViewModel.IsLoading ? Visibility.Visible : Visibility.Collapsed;
         LoadingText.Text = ViewModel.LoadingText;
@@ -103,6 +111,28 @@ public sealed partial class MainWindow : Window
     private void OnCancelLoad(object sender, RoutedEventArgs e) => ViewModel.CancelLoad();
 
     private void OnExit(object sender, RoutedEventArgs e) => Close();
+
+    private void OnFind(object sender, RoutedEventArgs e) => _logView?.FocusFind();
+
+    private void OnFindNext(object sender, RoutedEventArgs e) => _logView?.FindNext(forward: true);
+
+    private void OnFindPrevious(object sender, RoutedEventArgs e) => _logView?.FindNext(forward: false);
+
+    private void OnFocusFilter(object sender, RoutedEventArgs e) => _logView?.FocusQuery();
+
+    private void OnClearFilters(object sender, RoutedEventArgs e) => _logView?.ClearFilters();
+
+    private async void OnGoTo(object sender, RoutedEventArgs e)
+    {
+        if (_logView is { } view)
+        {
+            await view.GoToAsync();
+        }
+    }
+
+    private void OnNextProblem(object sender, RoutedEventArgs e) => _logView?.GoToProblem(forward: true);
+
+    private void OnPreviousProblem(object sender, RoutedEventArgs e) => _logView?.GoToProblem(forward: false);
 
     private async void OnAbout(object sender, RoutedEventArgs e)
     {
