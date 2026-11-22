@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest an idea or improvement
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Please search the [existing issues](https://github.com/bhagavan44/LogLens/issues) first.
+        LogLens is an offline, read-only viewer, so features that send logs to a server or change log files are out of scope.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe what you're trying to do and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How you'd like it to work.
+    validations:
+      required: true
+  - type: input
+    id: format
+    attributes:
+      label: Log format
+      description: If this is about a log format, which one (Serilog text, CLEF, NLog, log4net, ...) and a sample line.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds or other approaches you've thought about.
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contribution
+      options:
+        - label: I'd like to work on this myself
