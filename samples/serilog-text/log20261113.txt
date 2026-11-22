@@ -1,0 +1,28 @@
+2026-11-13 08:00:00.012 +05:30 [INF] Application starting up
+2026-11-13 08:00:00.348 +05:30 [DBG] Loaded configuration from appsettings.json
+2026-11-13 08:00:01.120 +05:30 [INF] Now listening on: http://localhost:5000
+2026-11-13 08:00:04.634 +05:30 [INF] HTTP GET /api/orders/32131 responded 200 in 810 ms
+2026-11-13 08:00:04.750 +05:30 [INF] Order 65083 shipped to customer 1204
+2026-11-13 08:00:04.888 +05:30 [WRN] Retry 2/3 for payment gateway after timeout of 664 ms
+2026-11-13 08:00:05.301 +05:30 [ERR] Payment failed for order 67204
+System.InvalidOperationException: Sequence contains no matching element
+   at System.Linq.ThrowHelper.ThrowNoMatchException()
+   at Shop.Payments.PaymentService.Charge(Order order) in C:\src\Shop\Payments\PaymentService.cs:line 87
+   at Shop.Orders.OrderHandler.Handle(OrderCreated message) in C:\src\Shop\Orders\OrderHandler.cs:line 41
+2026-11-13 08:00:05.601 +05:30 [INF] HTTP GET /api/orders/4209 responded 200 in 21 ms
+2026-11-13 08:00:05.959 +05:30 [VRB] Cache hit for key product:84528
+2026-11-13 08:00:06.177 +05:30 [INF] Message with an embedded newline:
+this second line is part of the same event
+and so is this third line
+2026-11-13 08:00:06.251 +05:30 [DBG] Order 93346 shipped to customer 2468
+2026-11-13 08:00:07.004 +05:30 [ERR] Failed to deserialize message 77190 from queue
+Newtonsoft.Json.JsonReaderException: Unexpected character encountered while parsing value: <. Path '', line 0, position 0.
+ ---> System.FormatException: Input string was not in a correct format.
+   at System.Number.ThrowFormatException[TChar](ReadOnlySpan`1 value)
+   at Shop.Messaging.Deserializer.Read(String body) in C:\src\Shop\Messaging\Deserializer.cs:line 23
+   --- End of inner exception stack trace ---
+   at Shop.Messaging.Deserializer.Read(String body) in C:\src\Shop\Messaging\Deserializer.cs:line 29
+2026-11-13 08:00:07.410 +05:30 [FTL] Unhandled exception in worker SyncInventory; shutting down
+System.OutOfMemoryException: Exception of type 'System.OutOfMemoryException' was thrown.
+   at Shop.Inventory.SyncJob.Run() in C:\src\Shop\Inventory\SyncJob.cs:line 112
+2026-11-13 08:00:07.512 +05:30 [INF] Application stopped
