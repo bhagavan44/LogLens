@@ -6,14 +6,14 @@ namespace LogLens.Infrastructure.Tests;
 
 public sealed class LogFileLoaderTests : IDisposable
 {
-    private const string Text = """
+    private static readonly string Text = """
         2026-11-13 08:00:00.012 +05:30 [INF] Application starting up
         2026-11-13 08:00:05.301 +05:30 [ERR] Payment failed — 日本語
         System.InvalidOperationException: boom
            at A.B()
         2026-11-13 08:00:07.512 +05:30 [INF] Application stopped
 
-        """;
+        """.ReplaceLineEndings("\n");
 
     private readonly string _folder = Directory.CreateTempSubdirectory("loglens-tests-").FullName;
 
