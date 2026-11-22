@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>LogLens.App</RootNamespace>
+    <AssemblyName>LogLens</AssemblyName>
+    <!-- The exe's File description, shown by Task Manager and Explorer's Open with list. -->
+    <AssemblyTitle>LogLens</AssemblyTitle>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <!-- Unpackaged + self-contained: no installer, certificate, runtime install or admin rights (NFR-11). -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <PublishTrimmed>false</PublishTrimmed>
+    <DefaultLanguage>en-US</DefaultLanguage>
+    <!-- Program.cs has its own Main: it points the Windows App SDK at the single-file extraction folder before WinUI starts. -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <!--
+      The resource index (it carries the compiled XAML) must be resources.pri, not <TargetName>.pri: an unpackaged app looks for
+      resources.pri, then <exe name>.pri, and publish.ps1 renames the exe (LogLens-<version>-<rid>.exe), as users may do too. Set for
+      every build so a publish-only resources.pri left in bin\ can't shadow a later build's index.
+    -->
+    <ProjectPriFileName>resources.pri</ProjectPriFileName>
+  </PropertyGroup>
+
+  <!--
+    `dotnet publish` produces ONE self-contained exe. Only while publishing, so builds and tests keep the plain folder layout.
+    EnableMsixTooling embeds resources.pri, IncludeAllContentForSelfExtract unpacks the native runtime on first start, and Program.Main sets
+    MICROSOFT_WINDOWSAPPRUNTIME_BASE_DIRECTORY. Because of that unpack, AppContext.BaseDirectory is NOT the exe's folder in a published
+    build: use Environment.ProcessPath for "where is the exe".
+  -->
+  <PropertyGroup Condition="'$(_IsPublishing)' == 'true'">
+    <PublishSingleFile>true</PublishSingleFile>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.15" />
+  </ItemGroup>
+
+  <!-- Regenerate with build/make-icon.ps1. The .ico is also embedded in the exe (ApplicationIcon). -->
+  <ItemGroup>
+    <Content Include="Assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\AppIcon.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- Inter (SIL OFL 1.1, licence alongside) is the log font (FR-P2); LogFormat loads it by ms-appx URI. -->
+  <ItemGroup>
+    <Content Include="Assets\Fonts\Inter.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Fonts\Inter-OFL.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LogLens.Core\LogLens.Core.csproj" />
+    <ProjectReference Include="..\LogLens.Infrastructure\LogLens.Infrastructure.csproj" />
+    <ProjectReference Include="..\LogLens.ViewModels\LogLens.ViewModels.csproj" />
+  </ItemGroup>
+
+</Project>

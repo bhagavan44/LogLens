@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="LogLens.App.Views.EmptyStateView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- UX-2: the drop zone. The whole window accepts dropped files (MainWindow.OnDrop); this only says so. -->
+    <Grid Padding="32">
+        <Border
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            MaxWidth="560"
+            Padding="48,40"
+            CornerRadius="8"
+            BorderThickness="2"
+            BorderBrush="{ThemeResource ControlStrongStrokeColorDefaultBrush}"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="12">
+                <FontIcon
+                    Glyph="&#xE8B5;"
+                    FontSize="48"
+                    HorizontalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock
+                    Text="Drop a log file here"
+                    Style="{StaticResource SubtitleTextBlockStyle}"
+                    HorizontalAlignment="Center" />
+                <TextBlock
+                    Text="or open one with the button below (Ctrl+O). LogLens reads files written with Serilog's default text template, and never changes them."
+                    TextWrapping="Wrap"
+                    TextAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Button
+                    Content="Open file…"
+                    HorizontalAlignment="Center"
+                    Margin="0,8,0,0"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Click="OnOpenClick" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>
