@@ -1,0 +1,22 @@
+# Build output
+bin/
+obj/
+artifacts/
+TestResults/
+*.binlog
+
+# IDEs and editors
+.vs/
+.idea/
+*.user
+*.suo
+*.sublime-workspace
+.vscode/*
+!.vscode/extensions.json
+
+# Local agent settings
+.claude/
+
+# System files
+.DS_Store
+Thumbs.db

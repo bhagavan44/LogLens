@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Skips the jobs below when only docs or other non-source files changed. A job skipped by `if`
+  # still satisfies the required `build-and-test` check, unlike a workflow-level `paths` filter.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: filter
+        run: |
+          # HEAD is the PR merge commit and HEAD^1 is the base branch.
+          if git diff --quiet HEAD^1 HEAD -- \
+            src tests build samples '*.sln' '*.slnx' Directory.Build.props global.json \
+            .github/workflows/ci.yml; then
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-and-test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore LogLens.sln
+
+      - name: Build
+        run: dotnet build LogLens.sln -c Release --no-restore
+
+      - name: Unit tests
+        run: dotnet test LogLens.sln -c Release --no-build --verbosity normal
+
+      - name: Publish single-file exe
+        shell: pwsh
+        run: ./build/publish.ps1 -Runtime win-x64
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: LogLens-win-x64
+          path: artifacts/LogLens-*.exe
+          if-no-files-found: error
+          retention-days: 14
