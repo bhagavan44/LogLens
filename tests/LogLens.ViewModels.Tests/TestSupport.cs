@@ -6,17 +6,18 @@ namespace LogLens.ViewModels.Tests;
 
 internal static class TestSupport
 {
-    public const string Text = """
+    public static readonly string Text = """
         2026-11-13 08:00:00.012 +05:30 [INF] Application starting up
         2026-11-13 08:00:05.301 +05:30 [ERR] Payment failed
         System.InvalidOperationException: boom
            at A.B()
         2026-11-13 08:00:06.177 +05:30 [WRN] Message with an embedded newline:
         second line
-        """;
+        """.ReplaceLineEndings("\n");
 
-    public static LogDocument Document(string text = Text, string path = @"C:\logs\app.txt")
+    public static LogDocument Document(string? text = null, string path = @"C:\logs\app.txt")
     {
+        text ??= Text;
         var document = new LogDocument(path, LogFormats.SerilogText) { EncodingName = "UTF-8", FileSizeBytes = 2048 };
         var parser = LogFormats.SerilogText.CreateParser(path);
         document.Text.Append(text);

@@ -6,7 +6,7 @@ namespace LogLens.Core.Tests;
 
 public class SerilogTextFormatTests
 {
-    private const string Sample = """
+    private static readonly string Sample = """
         # stray header line
         2026-11-13 08:00:00.012 +05:30 [INF] Application starting up
         2026-11-13 08:00:05.301 +05:30 [ERR] Payment failed for order 67204
@@ -16,7 +16,7 @@ public class SerilogTextFormatTests
         second line
         2026-11-13 08:00:07.512 +05:30 [WRN] Ünïcödé — 日本語 ✓
         2026-11-13 08:00:07.600 +05:30 [inf] last one
-        """;
+        """.ReplaceLineEndings("\n");
 
     [Fact]
     public void Registry_offers_serilog_text_as_the_only_and_default_format()

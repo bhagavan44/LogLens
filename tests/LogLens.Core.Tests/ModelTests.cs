@@ -52,13 +52,13 @@ public class TextStoreTests
 
 public class LogDocumentTests
 {
-    private const string Text = """
+    private static readonly string Text = """
         2026-11-13 08:00:00.012 +05:30 [INF] one
         2026-11-13 08:00:05.301 +05:30 [ERR] two
         System.Exception: boom
            at A.B()
         2026-11-13 08:00:06.000 +05:30 [ERR] three
-        """;
+        """.ReplaceLineEndings("\n");
 
     [Fact]
     public void Counts_levels_and_reports_raw_text_and_line_numbers()
