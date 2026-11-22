@@ -44,11 +44,13 @@ jobs:
         shell: pwsh
         run: ./build/publish.ps1 -Runtime ${{ matrix.runtime }}
 
+      # No --clobber: winget pins each exe by SHA256, so a published exe must never be replaced.
+      # A re-run fails here instead; ship a fix as a new version.
       - name: Attach to release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ needs.release-please.outputs.tag_name }} (Get-ChildItem artifacts/LogLens-*.exe).FullName --clobber
+        run: gh release upload ${{ needs.release-please.outputs.tag_name }} (Get-ChildItem artifacts/LogLens-*.exe).FullName
 
   # Opens a pull request on microsoft/winget-pkgs for the new version. Needs a WINGET_TOKEN secret: a
   # personal access token with public_repo scope (GITHUB_TOKEN can't open PRs on another repo).
