@@ -120,6 +120,37 @@ public sealed partial class LogViewModel
         MinLevelIndex = 0;
     }
 
+    /// <summary>The document grew or was cleared: update the counts on the level buttons, adding Unknown / Unparsed once there are some.</summary>
+    private void RefreshLevelCounts()
+    {
+        foreach (var toggle in LevelToggles)
+        {
+            toggle.Count = Document.CountOf(toggle.Level);
+        }
+
+        var added = false;
+        foreach (var level in new[] { LogLevel.Unknown, LogLevel.Unparsed })
+        {
+            if (Document.CountOf(level) > 0 && !CanFilterByLevel(level))
+            {
+                // Follow the level preset in force, so "Warning and above" keeps meaning that.
+                var toggle = new LevelToggle(level, Document.CountOf(level), OnLevelToggled);
+                if (MinLevelIndex > 0 && MinLevelIndex < MinLevels.Length)
+                {
+                    toggle.SetSilently(InPreset(level, MinLevels[MinLevelIndex]));
+                }
+
+                LevelToggles.Add(toggle);
+                added |= !toggle.IsOn;
+            }
+        }
+
+        if (added)
+        {
+            QueueApply(); // the new button hides events the current filter still lets through
+        }
+    }
+
     // ------------------------------------------------------------------ levels (FR-S1)
 
     /// <summary>True when there is a level button for <paramref name="level"/>.</summary>
@@ -476,6 +507,8 @@ public sealed partial class LogViewModel
         var cancellation = _filterCancellation = new CancellationTokenSource();
         var token = cancellation.Token;
 
+        // While the worker reads the document it must not change: stream batches wait until the pass ends.
+        BeginPass();
         try
         {
             var spec = BuildSpec();
@@ -502,6 +535,8 @@ public sealed partial class LogViewModel
             token.ThrowIfCancellationRequested();
 
             var keep = SelectedEvent;
+            _activePredicate = predicate;
+            _contextActive = context > 0;
             View.SetFilter(indices);
             LastFilterMilliseconds = spec.IsActive ? clock.Elapsed.TotalMilliseconds : null;
             HasActiveFilters = spec.IsActive;
@@ -522,6 +557,8 @@ public sealed partial class LogViewModel
             {
                 IsFiltering = false;
             }
+
+            EndPass();
         }
     }
 }

@@ -36,6 +36,12 @@
                     Margin="0,8,0,0"
                     Style="{StaticResource AccentButtonStyle}"
                     Click="OnOpenClick" />
+
+                <!-- UX-2: recent files, newest first. -->
+                <StackPanel x:Name="RecentPanel" Margin="0,16,0,0" Spacing="2" Visibility="Collapsed">
+                    <TextBlock Text="Recent files" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,0,0,4" />
+                    <StackPanel x:Name="RecentList" Spacing="0" />
+                </StackPanel>
             </StackPanel>
         </Border>
     </Grid>

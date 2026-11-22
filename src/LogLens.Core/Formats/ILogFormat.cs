@@ -29,8 +29,11 @@ public interface ILogFormat
     /// <summary>Which optional fields this format fills.</summary>
     LogFields Fields { get; }
 
-    /// <summary>Creates a parser for one stream of text (a file), whose events carry <paramref name="sourceFile"/>.</summary>
-    ILogParser CreateParser(string? sourceFile);
+    /// <summary>
+    /// Creates a parser for one stream of text (a file), whose events carry <paramref name="sourceFile"/>. A parser that continues a document
+    /// — the next file of a rolling log (FR-T3) — starts at character offset <paramref name="startOffset"/> and event id <paramref name="firstId"/>.
+    /// </summary>
+    ILogParser CreateParser(string? sourceFile, long startOffset = 0, int firstId = 0);
 }
 
 /// <summary>
@@ -43,8 +46,23 @@ public interface ILogFormat
 /// </remarks>
 public interface ILogParser
 {
+    /// <summary>Events with a lower id are final; this id and above are provisional (the event still open, or only previewed).</summary>
+    int CommittedId { get; }
+
+    /// <summary>Absolute character offset just past all the text given so far.</summary>
+    long EndOffset { get; }
+
+    /// <summary>True when the text held back ends in the middle of a line (FR-T6).</summary>
+    bool HasPartialLine { get; }
+
     /// <summary>Adds the next piece of the stream and returns what changed.</summary>
     ParseDelta Append(string text, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The events as they would be if the stream ended now — an unterminated last line included — <b>without</b> changing any state. Shows the
+    /// last line of a file that has stopped growing without a final newline; the next <see cref="Append"/> supersedes it.
+    /// </summary>
+    ParseDelta Preview();
 
     /// <summary>Ends the stream: text held back (an unterminated last line, the open event) becomes final. Returns the closing delta.</summary>
     ParseDelta Complete();

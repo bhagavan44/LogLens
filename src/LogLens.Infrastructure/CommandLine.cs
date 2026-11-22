@@ -4,6 +4,8 @@ namespace LogLens.Infrastructure;
 /// What LogLens was started with (FR-O1): <c>LogLens.exe [options] [&lt;log file&gt; …]</c>. Options start with <c>--</c>; the ones listed in
 /// <see cref="OptionsWithValue"/> take the next argument as their value. Everything else is a file to open.
 /// </summary>
+/// <param name="Files">The files to open, as full paths.</param>
+/// <param name="DataDir">The folder after <c>--data-dir</c>; null without the option, empty when the option has no folder after it.</param>
 public sealed record CommandLine(IReadOnlyList<string> Files, string? DataDir)
 {
     /// <summary>Keeps settings and state in another folder (FR-P6).</summary>
@@ -23,7 +25,7 @@ public sealed record CommandLine(IReadOnlyList<string> Files, string? DataDir)
             var arg = args[i];
             if (OptionsWithValue.Contains(arg, StringComparer.OrdinalIgnoreCase))
             {
-                var value = i + 1 < args.Count ? args[++i] : null;
+                var value = i + 1 < args.Count && !args[i + 1].StartsWith("--", StringComparison.Ordinal) ? args[++i] : string.Empty;
                 if (string.Equals(arg, DataDirOption, StringComparison.OrdinalIgnoreCase))
                 {
                     dataDir = value;

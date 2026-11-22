@@ -33,9 +33,20 @@ public class CommandLineTests
     [Fact]
     public void Unknown_switches_and_blank_arguments_are_ignored()
     {
-        var commandLine = CommandLine.Parse(["--whatever", " ", "app.log", "--data-dir"], WorkingDirectory);
+        var commandLine = CommandLine.Parse(["--whatever", " ", "app.log"], WorkingDirectory);
 
         Assert.Equal([@"C:\work\app.log"], commandLine.Files);
         Assert.Null(commandLine.DataDir);
+    }
+
+    [Theory]
+    [InlineData("--data-dir")]
+    [InlineData("--data-dir", "--other")]
+    public void Data_dir_without_a_folder_is_empty_rather_than_absent(params string[] args)
+    {
+        var commandLine = CommandLine.Parse(args, WorkingDirectory);
+
+        Assert.Equal(string.Empty, commandLine.DataDir);
+        Assert.Empty(commandLine.Files);
     }
 }

@@ -1,7 +1,10 @@
+using LogLens.App.Services;
 using LogLens.Core.Diagnostics;
-using LogLens.Core.Loading;
+using LogLens.Core.State;
+using LogLens.Core.Streaming;
 using LogLens.Infrastructure;
 using LogLens.Infrastructure.Loading;
+using LogLens.Infrastructure.State;
 using LogLens.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
@@ -33,18 +36,36 @@ public partial class App : Application
         _window = window;
         window.Activate();
 
-        // "Open with" / command line: LogLens.exe [--data-dir <folder>] [<log file> ...]
-        var commandLine = CommandLine.Parse(Environment.GetCommandLineArgs().Skip(1).ToArray(), Environment.CurrentDirectory);
-        if (commandLine.Files.Count > 0)
+        // Only the LogLens that owns the profile remembers the open log; a --new-window one leaves the session alone.
+        var primary = Program.Instance is { IsPrimary: true };
+        var viewModel = window.ViewModel;
+        viewModel.RemembersSession = primary;
+
+        // "Open with" / command line: LogLens.exe [--data-dir <folder>] [<log file> ...]; otherwise what was open last time (FR-P3).
+        if (Program.CommandLine.Files.Count > 0)
         {
-            window.Open(commandLine.Files);
+            window.Open(Program.CommandLine.Files);
+        }
+        else if (primary)
+        {
+            _ = viewModel.RestoreSessionAsync();
+        }
+
+        // Later starts ("Open with", a second LogLens.exe) hand their command line to this window.
+        if (Program.Instance is { IsPrimary: true } instance)
+        {
+            instance.Listen(request => GuardedSynchronizationContext.Enqueue(window.DispatcherQueue, () => window.HandleLaunch(request)));
         }
     }
 
     private static ServiceProvider ConfigureServices()
     {
         var services = new ServiceCollection();
-        services.AddSingleton<ILogDocumentLoader>(_ => new LogFileLoader());
+        services.AddSingleton(Program.Paths);
+        services.AddSingleton<IStateStore>(sp => new JsonStateStore(sp.GetRequiredService<AppPaths>()));
+        services.AddSingleton(sp => new RecentFilesService(sp.GetRequiredService<IStateStore>()));
+        services.AddSingleton(sp => new SessionService(sp.GetRequiredService<IStateStore>()));
+        services.AddSingleton<ILogStreamFactory>(_ => new FileLogStreamFactory());
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();
         return services.BuildServiceProvider();

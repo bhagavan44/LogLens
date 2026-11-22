@@ -1,7 +1,10 @@
 using System.ComponentModel;
+using LogLens.App.Services;
 using LogLens.App.Views;
+using LogLens.Infrastructure.Instances;
 using LogLens.ViewModels;
 using Microsoft.UI.Composition.SystemBackdrops;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -15,6 +18,7 @@ namespace LogLens.App;
 public sealed partial class MainWindow : Window
 {
     private LogView? _logView;
+    private LogViewModel? _observedLog;
 
     public MainWindow(MainViewModel viewModel)
     {
@@ -38,12 +42,36 @@ public sealed partial class MainWindow : Window
 
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
         SyncAll();
+        SyncRecentFiles();
     }
 
     public MainViewModel ViewModel { get; }
 
     /// <summary>Opens files given on the command line or dropped on the window.</summary>
     public void Open(IReadOnlyList<string> paths) => _ = ViewModel.OpenAsync(paths);
+
+    /// <summary>Another start of LogLens handed its command line over (single instance): open its files here and come to the front.</summary>
+    public void HandleLaunch(LaunchRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        BringToFront();
+        var paths = request.ResolvePaths();
+        if (paths.Count > 0)
+        {
+            Open(paths);
+        }
+    }
+
+    private void BringToFront()
+    {
+        if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter)
+        {
+            presenter.Restore();
+        }
+
+        Activate();
+        NativeMethods.BringToFront(WinRT.Interop.WindowNative.GetWindowHandle(this));
+    }
 
     public void ReportUnexpectedError(Exception exception) => ViewModel.ReportUnexpectedError(exception);
 
@@ -56,9 +84,10 @@ public sealed partial class MainWindow : Window
             case nameof(MainViewModel.CurrentLog):
                 _logView = ViewModel.CurrentLog is { } log ? new LogView(log) : null;
                 LogHost.Content = _logView;
+                ObserveLog(ViewModel.CurrentLog);
                 break;
-            case nameof(MainViewModel.LoadProgress):
-                LoadingProgress.Value = ViewModel.LoadProgress;
+            case nameof(MainViewModel.RecentFiles):
+                SyncRecentFiles();
                 return;
         }
 
@@ -78,7 +107,7 @@ public sealed partial class MainWindow : Window
         EmptyState.Visibility = ViewModel.ShowEmptyState ? Visibility.Visible : Visibility.Collapsed;
         LoadingOverlay.Visibility = ViewModel.IsLoading ? Visibility.Visible : Visibility.Collapsed;
         LoadingText.Text = ViewModel.LoadingText;
-        LoadingProgress.Value = ViewModel.LoadProgress;
+        SyncLiveItems();
 
         if (ViewModel.Notice is { } notice)
         {
@@ -99,6 +128,115 @@ public sealed partial class MainWindow : Window
     }
 
     private void OnNoticeClosed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.Notice = null;
+
+    // ---------------------------------------------------------------- live log (FR-T1 … FR-T7)
+
+    private void ObserveLog(LogViewModel? log)
+    {
+        if (_observedLog is not null)
+        {
+            _observedLog.PropertyChanged -= OnLogPropertyChanged;
+        }
+
+        _observedLog = log;
+        if (log is not null)
+        {
+            log.PropertyChanged += OnLogPropertyChanged;
+        }
+    }
+
+    private void OnLogPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(LogViewModel.IsFollowing) or nameof(LogViewModel.IsPaused) or nameof(LogViewModel.FollowRolled)
+            or nameof(LogViewModel.CanFollow) or nameof(LogViewModel.CanRefresh))
+        {
+            SyncLiveItems();
+        }
+    }
+
+    private void SyncLiveItems()
+    {
+        var log = ViewModel.CurrentLog;
+        TailItem.IsEnabled = log is { CanFollow: true };
+        TailItem.IsChecked = log is { IsFollowing: true };
+        PauseItem.IsEnabled = log is { IsFollowing: true };
+        PauseItem.IsChecked = log is { IsPaused: true };
+        FollowRolledItem.IsEnabled = log is { CanFollow: true };
+        FollowRolledItem.IsChecked = log is { FollowRolled: true };
+        RefreshItem.IsEnabled = log is { CanRefresh: true };
+    }
+
+    private void OnTailClick(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.CurrentLog is { CanFollow: true } log)
+        {
+            log.IsFollowing = !log.IsFollowing; // Ctrl+T toggles whatever the menu shows
+        }
+
+        SyncLiveItems();
+    }
+
+    private void OnPauseClick(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.CurrentLog is { IsFollowing: true } log)
+        {
+            log.IsPaused = !log.IsPaused;
+        }
+
+        SyncLiveItems();
+    }
+
+    private void OnFollowRolledClick(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.CurrentLog is { } log)
+        {
+            log.FollowRolled = !log.FollowRolled;
+        }
+
+        SyncLiveItems();
+    }
+
+    private void OnRefreshClick(object sender, RoutedEventArgs e) => ViewModel.CurrentLog?.Refresh();
+
+    // ---------------------------------------------------------------- recent files (FR-O1, UX-2)
+
+    private void SyncRecentFiles()
+    {
+        var files = ViewModel.RecentFiles;
+        EmptyState.SetRecentFiles(files);
+
+        RecentMenu.Items.Clear();
+        for (var i = 0; i < files.Count; i++)
+        {
+            var path = files[i];
+            var item = new MenuFlyoutItem { Text = $"{i + 1}  {Path.GetFileName(path)}", Tag = path };
+            ToolTipService.SetToolTip(item, path);
+            item.Click += OnRecentItemClick;
+            RecentMenu.Items.Add(item);
+        }
+
+        if (files.Count > 0)
+        {
+            RecentMenu.Items.Add(new MenuFlyoutSeparator());
+            var clear = new MenuFlyoutItem { Text = "Clear recent files" };
+            clear.Click += (_, _) => ViewModel.ClearRecentFiles();
+            RecentMenu.Items.Add(clear);
+        }
+        else
+        {
+            RecentMenu.Items.Add(new MenuFlyoutItem { Text = "No recent files", IsEnabled = false });
+        }
+    }
+
+    private void OnRecentItemClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string path })
+        {
+            Open([path]);
+        }
+    }
+
+    private void OnRecentFileRequested(object? sender, string path) => Open([path]);
 
     // ---------------------------------------------------------------- commands
 

@@ -58,7 +58,7 @@ public sealed partial class LogViewModel : ObservableObject
 
     /// <summary>FR-D4: file name, line and event number.</summary>
     public string MetadataText => SelectedEvent is { } e
-        ? string.Create(CultureInfo.InvariantCulture, $"{Document.FileName}  ·  line {Document.LineNumberOf(e):N0}  ·  event {e.Id + 1:N0} of {Document.Events.Count:N0}")
+        ? string.Create(CultureInfo.InvariantCulture, $"{(e.SourceFile is { } file ? Path.GetFileName(file) : Document.FileName)}  ·  line {Document.LineNumberOf(e):N0}  ·  event {e.Id + 1:N0} of {Document.Events.Count:N0}")
         : string.Empty;
 
     // ----- status bar -----

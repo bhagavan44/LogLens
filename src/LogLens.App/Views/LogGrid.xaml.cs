@@ -71,6 +71,36 @@ public sealed partial class LogGrid : UserControl
     /// <summary>Re-renders the visible rows; selection and scroll position are kept.</summary>
     public void Refresh() => Render();
 
+    /// <summary>
+    /// The source changed from row <paramref name="firstRow"/> on (rows appended, or the last ones replaced, while a log loads or is tailed):
+    /// the scroll position and the selection are kept.
+    /// </summary>
+    public void RowsChanged(int firstRow)
+    {
+        var count = RowCount;
+        var activeAffected = _selection.Active >= firstRow;
+        _selection.Resize(count);
+        _viewport.Configure(count, _viewport.VisibleRows);
+        Render();
+        if (activeAffected)
+        {
+            RaiseSelectionChanged(); // the active row now shows another (or a replaced) event: the detail pane re-reads it
+        }
+    }
+
+    /// <summary>The last row is in view, so rows added at the end show on screen (FR-T2).</summary>
+    public bool IsAtEnd { get; private set; } = true;
+
+    /// <summary>Raised when the view moves to or away from the last row (scrolling, or the list growing).</summary>
+    public event EventHandler<bool>? AtEndChanged;
+
+    /// <summary>Scrolls so the last row is in view; the selection stays.</summary>
+    public void ScrollToEnd()
+    {
+        _viewport.ScrollTo(_viewport.MaxFirst);
+        Render();
+    }
+
     /// <summary>Selects row <paramref name="index"/> and scrolls it into view, centred when it was off-screen.</summary>
     public void RevealIndex(int index)
     {
@@ -236,6 +266,13 @@ public sealed partial class LogGrid : UserControl
         }
 
         SyncScrollBar();
+
+        var atEnd = _viewport.First >= _viewport.MaxFirst;
+        if (atEnd != IsAtEnd)
+        {
+            IsAtEnd = atEnd;
+            AtEndChanged?.Invoke(this, atEnd);
+        }
     }
 
     private void SyncScrollBar()
