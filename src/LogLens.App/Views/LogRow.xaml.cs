@@ -6,12 +6,17 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 
 namespace LogLens.App.Views;
 
 /// <summary>One visible row of the <see cref="LogGrid"/>. Rows are pooled and re-bound while scrolling.</summary>
 public sealed partial class LogRow : UserControl
 {
+    // Find-bar matches: black on yellow is 17:1 and reads the same in light and dark themes.
+    private static readonly Brush HighlightBackground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xFF, 0xD6, 0x0A));
+    private static readonly Brush HighlightForeground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x14, 0x14, 0x14));
+
     private bool _selected;
 
     public LogRow()
@@ -38,7 +43,7 @@ public sealed partial class LogRow : UserControl
 
     protected override AutomationPeer OnCreateAutomationPeer() => new LogRowAutomationPeer(this);
 
-    public void Bind(LogEvent e, bool selected, bool active)
+    public void Bind(LogEvent e, bool selected, bool active, Func<string, IReadOnlyList<(int Start, int Length)>>? highlighter)
     {
         var time = LogText.Time(e);
         var message = LogText.FirstLine(e.Message);
@@ -48,6 +53,7 @@ public sealed partial class LogRow : UserControl
         LevelBadge.Background = LogFormat.BadgeBackground(e.Level);
         LevelText.Foreground = LogFormat.BadgeForeground(e.Level);
         MessageText.Text = message;
+        ApplyHighlights(message, highlighter);
         ExceptionIcon.Visibility = e.Exception is null ? Visibility.Collapsed : Visibility.Visible;
 
         _selected = selected;
@@ -57,6 +63,24 @@ public sealed partial class LogRow : UserControl
 
         // Screen readers get the level spelled out (UX-5: never colour alone, and "ERR" reads poorly).
         AutomationProperties.SetName(this, $"{LogText.LevelName(e.Level)}, {time}, {message}{(e.Exception is null ? string.Empty : ", has exception")}");
+    }
+
+    private void ApplyHighlights(string text, Func<string, IReadOnlyList<(int Start, int Length)>>? highlighter)
+    {
+        MessageText.TextHighlighters.Clear();
+        var ranges = highlighter?.Invoke(text);
+        if (ranges is null || ranges.Count == 0)
+        {
+            return;
+        }
+
+        var highlight = new TextHighlighter { Background = HighlightBackground, Foreground = HighlightForeground };
+        foreach (var (start, length) in ranges)
+        {
+            highlight.Ranges.Add(new TextRange { StartIndex = start, Length = length });
+        }
+
+        MessageText.TextHighlighters.Add(highlight);
     }
 
     private void OnPointerEntered(object sender, PointerRoutedEventArgs e)

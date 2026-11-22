@@ -733,4 +733,17 @@ public class LogViewModelQuickFilterTests
 
         Assert.StartsWith("2 of 6 events", vm.StatusText);
     }
+
+    [Fact]
+    public async Task An_empty_result_is_announced_rather_than_shown_as_a_blank_list()
+    {
+        var vm = Docs.Vm();
+        Assert.False(vm.ShowNoMatches);
+
+        vm.QueryText = "@m contains 'nothing like this'";
+        await vm.WhenSettledAsync();
+
+        Assert.True(vm.ShowNoMatches);
+        Assert.Empty(vm.View);
+    }
 }

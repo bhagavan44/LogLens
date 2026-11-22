@@ -60,7 +60,34 @@ public sealed partial class LogGrid : UserControl
     /// <summary>The row with keyboard focus (what the detail pane shows), or null.</summary>
     public LogEvent? ActiveEvent => _source is { } s && _selection.Active >= 0 && _selection.Active < s.Count ? s[_selection.Active] : null;
 
+    /// <summary>Index of the active row; -1 when there is none.</summary>
+    public int ActiveIndex => _selection.Active;
+
     public int SelectedCount => _selection.Count;
+
+    /// <summary>Returns the ranges of a row's message to highlight (find bar, FR-S3); null for none. Call <see cref="Refresh"/> after changing it.</summary>
+    public Func<string, IReadOnlyList<(int Start, int Length)>>? Highlighter { get; set; }
+
+    /// <summary>Re-renders the visible rows; selection and scroll position are kept.</summary>
+    public void Refresh() => Render();
+
+    /// <summary>Selects row <paramref name="index"/> and scrolls it into view, centred when it was off-screen.</summary>
+    public void RevealIndex(int index)
+    {
+        if (_source is null || index < 0 || index >= _source.Count)
+        {
+            return;
+        }
+
+        _selection.SelectSingle(index);
+        if (index < _viewport.First || index >= _viewport.First + _viewport.VisibleRows)
+        {
+            _viewport.Center(index);
+        }
+
+        Render();
+        RaiseSelectionChanged();
+    }
 
     public IEnumerable<LogEvent> SelectedEvents()
     {
@@ -199,7 +226,7 @@ public sealed partial class LogGrid : UserControl
                 AutomationProperties.SetPositionInSet(row, index + 1);
                 AutomationProperties.SetSizeOfSet(row, count);
                 row.Visibility = Visibility.Visible;
-                row.Bind(_source[index], _selection.IsSelected(index), focused && index == _selection.Active);
+                row.Bind(_source[index], _selection.IsSelected(index), focused && index == _selection.Active, Highlighter);
             }
             else
             {

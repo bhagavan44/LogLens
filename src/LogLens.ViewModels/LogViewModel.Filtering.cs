@@ -66,6 +66,9 @@ public sealed partial class LogViewModel
     [ObservableProperty]
     public partial bool HasActiveFilters { get; private set; }
 
+    /// <summary>The filters leave no event at all: the grid says so instead of looking empty.</summary>
+    public bool ShowNoMatches => View.IsFiltered && View.Count == 0;
+
     /// <summary>How long the last filter pass took, or null when nothing is filtered.</summary>
     public double? LastFilterMilliseconds { get; private set; }
 
@@ -503,6 +506,7 @@ public sealed partial class LogViewModel
             LastFilterMilliseconds = spec.IsActive ? clock.Elapsed.TotalMilliseconds : null;
             HasActiveFilters = spec.IsActive;
             OnPropertyChanged(nameof(Events));
+            OnPropertyChanged(nameof(ShowNoMatches));
             OnPropertyChanged(nameof(StatusText));
             FilterApplied?.Invoke(this, keep);
 
