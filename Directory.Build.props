@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <!-- Bumped by release-please (see release-please-config.json). -->
+    <Version>0.0.0</Version> <!-- x-release-please-version -->
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <Authors>LogLens contributors</Authors>
+    <Product>LogLens</Product>
+    <Copyright>Copyright © LogLens contributors. Licensed under the GPL-3.0.</Copyright>
+  </PropertyGroup>
+</Project>
