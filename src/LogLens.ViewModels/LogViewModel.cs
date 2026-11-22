@@ -1,22 +1,31 @@
 using System.Globalization;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
+using LogLens.Core.Collections;
 using LogLens.Core.Models;
 
 namespace LogLens.ViewModels;
 
-/// <summary>One open log: its document, the selected event and the text of the detail pane and status bar.</summary>
+/// <summary>
+/// One open log: its document, the filtered list the grid shows, the selected event and the text of the detail pane and status bar.
+/// Filtering lives in the <c>.Filtering</c> partial, the find bar and navigation in <c>.Search</c>.
+/// </summary>
 public sealed partial class LogViewModel : ObservableObject
 {
     public LogViewModel(LogDocument document)
     {
         Document = document ?? throw new ArgumentNullException(nameof(document));
+        View = new LogEventView(document.Events);
+        InitFilters();
     }
 
     public LogDocument Document { get; }
 
-    /// <summary>What the grid shows: every event, oldest first.</summary>
-    public IReadOnlyList<LogEvent> Events => Document.Events;
+    /// <summary>The events left by the filters, oldest first. Swapped by a filter pass (see <see cref="FilterApplied"/>).</summary>
+    public LogEventView View { get; }
+
+    /// <summary>What the grid shows: <see cref="View"/>.</summary>
+    public IReadOnlyList<LogEvent> Events => View;
 
     /// <summary>The active row of the grid; the detail pane follows it.</summary>
     [ObservableProperty]
@@ -60,6 +69,11 @@ public sealed partial class LogViewModel : ObservableObject
         {
             var d = Document;
             var sb = new StringBuilder();
+            if (View.IsFiltered)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"{View.Count:N0} of ");
+            }
+
             sb.Append(CultureInfo.InvariantCulture, $"{d.Events.Count:N0} {(d.Events.Count == 1 ? "event" : "events")}");
             Append(sb, d.CountOf(LogLevel.Fatal), "fatal", "fatal");
             Append(sb, d.CountOf(LogLevel.Error), "error", "errors");
@@ -71,6 +85,11 @@ public sealed partial class LogViewModel : ObservableObject
             if (d.LoadTime > TimeSpan.Zero)
             {
                 sb.Append(CultureInfo.InvariantCulture, $"  ·  loaded in {d.LoadTime.TotalMilliseconds:N0} ms");
+            }
+
+            if (LastFilterMilliseconds is { } filtered)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"  ·  filtered in {filtered:N0} ms");
             }
 
             return sb.ToString();
