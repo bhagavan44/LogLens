@@ -20,9 +20,15 @@ Requires Windows 10 version 1809 or later, or Windows 11.
 
 ## Using LogLens
 
-**Open a log** with *File ▸ Open* (Ctrl+O), by dropping the file on the window, or from the command line
-(`LogLens.exe C:\logs\app.txt`). Files that another program is still writing open without blocking it.
-One log is shown at a time for now; tabs come in a later version.
+**Open a log** with *File ▸ Open* (Ctrl+O), by dropping the file on the window, from *File ▸ Recent
+files* or the list on the start screen, or from the command line (`LogLens.exe C:\logs\app.txt`). Files
+that another program is still writing open without blocking it. Large files load in the background:
+the first rows show at once, the status bar shows the progress, and *Stop* ends the load and keeps
+what was read. One log is shown at a time for now; tabs come in a later version.
+
+LogLens runs once per user: opening another file from Explorer or the command line while it runs
+opens the file in the running window and brings it to the front. When you start LogLens without a
+file, it reopens the log that was open last time (with tail on if it was on).
 
 The **event list** shows one row per event: time (as logged), level and the first line of the message.
 A ⚠ marks events that carry an exception. Lines before the first event that don't match the format
@@ -76,12 +82,43 @@ Ctrl+Shift+E jump to the next / previous warning, error or fatal event.
 | Ctrl+G | Go to an event number or a time |
 | Ctrl+E / Ctrl+Shift+E | Next / previous warning or error |
 
+### Live logs
+
+**Tail** (Ctrl+T, or the *Tail* button) shows new events as they are written, within a second. The list
+follows the newest event while it is in view; scroll up to read and the new events are counted in an
+*N new events* button that takes you back down. *Pause* holds new events back so the list stays still,
+and shows them all when you resume. Filters and the find bar apply to new events too.
+
+A **rolling log** (`log20261113.txt` → `log20261114.txt`, or `app-001.log` → `app-002.log`) is followed
+to its next file in the same folder; turn this off with *View ▸ Follow the next file of a rolling log*.
+A file that gets shorter or is replaced is read again from the start, and a file that disappears is
+waited for until it is back.
+
+With tail off, **Refresh** (F5) reads what was written since the file was last read.
+
+| Shortcut | Action |
+|---|---|
+| Ctrl+T | Tail on / off |
+| F5 | Refresh (with tail off) |
+
 Files are read as UTF-8, or UTF-16 when they start with a byte-order mark.
+
+### Command line
+
+```
+LogLens.exe [--data-dir <folder>] [--new-window] [<log file>]
+```
+
+- `--data-dir <folder>` keeps the recent files and the open log in `<folder>\LogLens` instead of
+  `%APPDATA%\LogLens`, for a portable copy or for testing. Each folder is a separate LogLens.
+- `--new-window` starts a separate LogLens instead of handing the file to the running one; it does not
+  change what is reopened next time.
 
 ## Privacy
 
 LogLens sends no telemetry and makes no network calls. Logs are only read, opened with sharing so
-the app writing them is never blocked.
+the app writing them is never blocked. The only file LogLens writes is `%APPDATA%\LogLens\state.json`
+(the recent files and the open log).
 
 ## Contributing
 
