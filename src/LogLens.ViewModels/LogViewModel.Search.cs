@@ -226,12 +226,38 @@ public sealed partial class LogViewModel
 
     /// <summary>
     /// Rows changed at the end of the list (new events, or the last event extended): drop the matches from <paramref name="firstRow"/> on and
-    /// test the rows there now, so "n of m" and F3 stay right without searching the whole list again.
+    /// test the rows there now, so "n of m" and F3 stay right without searching the whole list again. In a newest-first list the change is at
+    /// the top instead: the first <paramref name="rowsRemoved"/> rows went, <paramref name="rowsAdded"/> came, and the rest moved down.
     /// </summary>
     private void UpdateMatchesAfterSync(int firstRow, int rowsRemoved, int rowsAdded)
     {
         if (CurrentMatcher is not { } matcher || (rowsRemoved == 0 && rowsAdded == 0))
         {
+            return;
+        }
+
+        if (View.NewestFirst)
+        {
+            var shift = rowsAdded - rowsRemoved;
+            var shifted = new List<int>(_matches.Length + 4);
+            for (var row = 0; row < rowsAdded && row < View.Count; row++)
+            {
+                if (matcher.IsMatch(View[row]))
+                {
+                    shifted.Add(row);
+                }
+            }
+
+            foreach (var match in _matches)
+            {
+                if (match >= rowsRemoved && match + shift >= 0)
+                {
+                    shifted.Add(match + shift);
+                }
+            }
+
+            _matches = [.. shifted];
+            UpdateSummary();
             return;
         }
 
@@ -314,8 +340,8 @@ public sealed partial class LogViewModel
                 return row >= 0 ? (row, null) : (-1, string.Create(CultureInfo.InvariantCulture, $"Event {n.Number:N0} is hidden by the current filters."));
 
             case GoToTarget.Time t:
-                var at = GoTo.IndexAtOrAfter(View, t.Value);
-                return at >= 0 ? (at, null) : (-1, "No event with a timestamp is shown.");
+                var at = GoTo.IndexAtOrAfter(View.Chronological, t.Value);
+                return at >= 0 ? (View.RowOfPosition(at), null) : (-1, "No event with a timestamp is shown.");
 
             default:
                 return (-1, "Type an event number or a time.");

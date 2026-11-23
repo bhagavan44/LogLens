@@ -489,8 +489,9 @@ public sealed partial class LogViewModel
         {
             var apply = _lastQueuedApply;
             var search = _lastScheduledSearch;
-            await Task.WhenAll(apply, search);
-            if (ReferenceEquals(apply, _lastQueuedApply) && ReferenceEquals(search, _lastScheduledSearch))
+            var analysis = _lastAnalysis;
+            await Task.WhenAll(apply, search, analysis);
+            if (ReferenceEquals(apply, _lastQueuedApply) && ReferenceEquals(search, _lastScheduledSearch) && ReferenceEquals(analysis, _lastAnalysis))
             {
                 return;
             }
@@ -537,6 +538,9 @@ public sealed partial class LogViewModel
             var keep = SelectedEvent;
             _activePredicate = predicate;
             _contextActive = context > 0;
+
+            // The timeline shows what every filter but its own time window leaves, so a bar stays visible after it was picked.
+            _timelinePredicate = (spec with { Time = TimeRange.Open }).BuildPredicate();
             View.SetFilter(indices);
             LastFilterMilliseconds = spec.IsActive ? clock.Elapsed.TotalMilliseconds : null;
             HasActiveFilters = spec.IsActive;
@@ -544,6 +548,7 @@ public sealed partial class LogViewModel
             OnPropertyChanged(nameof(ShowNoMatches));
             OnPropertyChanged(nameof(StatusText));
             FilterApplied?.Invoke(this, keep);
+            ScheduleAnalysis(TimeSpan.Zero);
 
             await RecomputeMatchesAsync();
         }
