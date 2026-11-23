@@ -282,10 +282,12 @@
                     <ColumnDefinition x:Name="HeaderLevelColumn" />
                     <ColumnDefinition Width="16" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition x:Name="HeaderSourceColumn" Width="0" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="Time" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1" Text="Level" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="3" Text="Message" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock x:Name="HeaderSourceText" Grid.Column="4" Text="Source" FontWeight="SemiBold" VerticalAlignment="Center" Visibility="Collapsed" />
             </Grid>
 
             <local:LogGrid
@@ -303,6 +305,11 @@
                         <MenuFlyoutItem x:Name="RowOnlyLevelItem" Text="Show only this level" Click="OnRowOnlyLevelClick" />
                         <MenuFlyoutItem x:Name="RowHideLevelItem" Text="Hide this level" Click="OnRowHideLevelClick" />
                         <MenuFlyoutItem x:Name="RowAroundItem" Text="Show events within ± 30 s of this one" Click="OnRowAroundClick" />
+                        <MenuFlyoutSeparator />
+                        <MenuFlyoutItem x:Name="RowBookmarkItem" Text="Bookmark" Click="OnRowBookmarkClick" KeyboardAcceleratorTextOverride="Ctrl+F2">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8A4;" /></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem x:Name="RowFindAllItem" Text="Find all events containing…" Click="OnRowFindAllClick" KeyboardAcceleratorTextOverride="Ctrl+Shift+F" />
                     </MenuFlyout>
                 </local:LogGrid.ContextFlyout>
             </local:LogGrid>
@@ -348,6 +355,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <TextBlock
@@ -416,6 +424,94 @@
                     AutomationProperties.Name="Raw event text"
                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+            </Grid>
+
+            <!-- ===== Bookmarks panel (FR-N1) ===== -->
+            <Grid
+                Grid.Row="4"
+                Margin="0,8,0,0"
+                Padding="0,8,0,0"
+                RowSpacing="4"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,0"
+                Visibility="{x:Bind local:LogView.ToVisibility(ViewModel.BookmarksPanelVisible), Mode=OneWay}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid ColumnSpacing="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Bookmarks" Style="{StaticResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                    <HyperlinkButton Grid.Column="1" Content="Clear" FontSize="12" Padding="6,2"
+                                     IsEnabled="{x:Bind ViewModel.HasBookmarks, Mode=OneWay}"
+                                     ToolTipService.ToolTip="Remove every bookmark of this log"
+                                     AutomationProperties.Name="Clear bookmarks"
+                                     Click="OnClearBookmarksClick" />
+                    <Button Grid.Column="2" Padding="6" ToolTipService.ToolTip="Close the bookmarks panel" AutomationProperties.Name="Close bookmarks panel"
+                            Click="OnCloseBookmarksPanelClick">
+                        <FontIcon Glyph="&#xE711;" FontSize="10" />
+                    </Button>
+                </Grid>
+
+                <TextBlock
+                    Grid.Row="1"
+                    TextWrapping="Wrap"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Visibility="{x:Bind local:LogView.ToVisibilityUnless(ViewModel.HasBookmarks), Mode=OneWay}"
+                    Text="No bookmarks yet. Press Ctrl+F2 on an event to bookmark it, then F2 / Shift+F2 to step through them." />
+                <ListView
+                    x:Name="BookmarkList"
+                    Grid.Row="1"
+                    MaxHeight="240"
+                    ItemsSource="{x:Bind ViewModel.Bookmarks}"
+                    SelectionMode="None"
+                    IsItemClickEnabled="True"
+                    ItemClick="OnBookmarkItemClick"
+                    Visibility="{x:Bind local:LogView.ToVisibility(ViewModel.HasBookmarks), Mode=OneWay}"
+                    AutomationProperties.Name="Bookmarks">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="Padding" Value="4,0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BookmarkItem">
+                            <Grid ColumnSpacing="8" Padding="0,4" AutomationProperties.Name="{x:Bind AccessibleName}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2">
+                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis">
+                                        <Run Text="{x:Bind NumberText}" /><Run Text="  ·  " /><Run Text="{x:Bind TimeText}" /><Run Text="  ·  " /><Run Text="{x:Bind LevelText}" /><Run Text="  " /><Run Text="{x:Bind Source}" />
+                                    </TextBlock>
+                                    <TextBlock Text="{x:Bind Preview}" TextTrimming="CharacterEllipsis" FontSize="12" />
+                                    <TextBox Text="{x:Bind Note, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Add a note" FontSize="12"
+                                             AutomationProperties.Name="Bookmark note" />
+                                </StackPanel>
+                                <Button Grid.Column="1" VerticalAlignment="Top" Padding="6" ToolTipService.ToolTip="Remove this bookmark"
+                                        AutomationProperties.Name="Remove bookmark" Click="OnRemoveBookmarkClick">
+                                    <FontIcon Glyph="&#xE74D;" FontSize="12" />
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+                <TextBlock
+                    x:Name="BookmarkHint"
+                    Grid.Row="2"
+                    TextWrapping="Wrap"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Visibility="Collapsed"
+                    AutomationProperties.LiveSetting="Polite" />
             </Grid>
         </Grid>
 

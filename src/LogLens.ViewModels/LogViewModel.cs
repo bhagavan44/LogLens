@@ -3,6 +3,7 @@ using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LogLens.Core.Collections;
 using LogLens.Core.Models;
+using LogLens.Core.State;
 
 namespace LogLens.ViewModels;
 
@@ -12,14 +13,22 @@ namespace LogLens.ViewModels;
 /// </summary>
 public sealed partial class LogViewModel : ObservableObject
 {
-    public LogViewModel(LogDocument document)
+    /// <param name="document">The log to show.</param>
+    /// <param name="bookmarks">Where bookmarks are kept (FR-N1); without one, bookmarks live only as long as this view-model.</param>
+    public LogViewModel(LogDocument document, BookmarkService? bookmarks = null)
     {
         Document = document ?? throw new ArgumentNullException(nameof(document));
         View = new LogEventView(document.Events);
+        _bookmarkService = bookmarks ?? new BookmarkService(new InMemoryStateStore());
+        _bookmarkService.Changed += OnBookmarkServiceChanged;
         InitFilters();
+        ResolveBookmarks(0);
     }
 
     public LogDocument Document { get; }
+
+    /// <summary>The log is a merged view of several files (FR-O4): the grid shows each event's file.</summary>
+    public bool IsMerged => Document.IsMerged;
 
     /// <summary>The events left by the filters, oldest first. Swapped by a filter pass (see <see cref="FilterApplied"/>).</summary>
     public LogEventView View { get; }
@@ -134,7 +143,8 @@ public sealed partial class LogViewModel : ObservableObject
         }
     }
 
-    internal static string FormatSize(long bytes) => bytes switch
+    /// <summary>"512 B", "3.4 KB", "12.0 MB".</summary>
+    public static string FormatSize(long bytes) => bytes switch
     {
         < 1024 => string.Create(CultureInfo.InvariantCulture, $"{bytes} B"),
         < 1024 * 1024 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1024.0:F1} KB"),

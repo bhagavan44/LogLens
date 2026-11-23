@@ -22,20 +22,18 @@
                     HorizontalAlignment="Center"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <TextBlock
-                    Text="Drop a log file here"
+                    Text="Drop log files or a folder here"
                     Style="{StaticResource SubtitleTextBlockStyle}"
                     HorizontalAlignment="Center" />
                 <TextBlock
-                    Text="or open one with the button below (Ctrl+O). LogLens reads files written with Serilog's default text template, and never changes them."
+                    Text="or open them with the buttons below (Ctrl+O, Ctrl+Shift+O). Each file opens in a tab, or merge several into one view. LogLens reads files written with Serilog's default text template, and never changes them."
                     TextWrapping="Wrap"
                     TextAlignment="Center"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                <Button
-                    Content="Open file…"
-                    HorizontalAlignment="Center"
-                    Margin="0,8,0,0"
-                    Style="{StaticResource AccentButtonStyle}"
-                    Click="OnOpenClick" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" Margin="0,8,0,0">
+                    <Button Content="Open files…" Style="{StaticResource AccentButtonStyle}" Click="OnOpenClick" />
+                    <Button Content="Open folder…" Click="OnOpenFolderClick" />
+                </StackPanel>
 
                 <!-- UX-2: recent files, newest first. -->
                 <StackPanel x:Name="RecentPanel" Margin="0,16,0,0" Spacing="2" Visibility="Collapsed">

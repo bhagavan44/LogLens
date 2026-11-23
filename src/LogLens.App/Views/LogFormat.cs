@@ -20,6 +20,9 @@ public static class LogFormat
 
     public const double LevelColumnWidth = 40;
 
+    /// <summary>The file name column of a merged view (FR-O4).</summary>
+    public const double SourceColumnWidth = 160;
+
     /// <summary>The Inter file shipped with the app, so the default font does not depend on what is installed.</summary>
     public static FontFamily TextFont { get; } = new("ms-appx:///Assets/Fonts/Inter.ttf#Inter, Segoe UI");
 

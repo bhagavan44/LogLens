@@ -1,4 +1,5 @@
 using LogLens.Core.Formats;
+using LogLens.Core.Merging;
 
 namespace LogLens.Core.Models;
 
@@ -34,8 +35,18 @@ public sealed class LogDocument
     /// <summary>The file being read now: after a rolling log moved on (FR-T3), its latest file; otherwise <see cref="FilePath"/>.</summary>
     public string? CurrentFilePath => _files[^1].Path;
 
-    /// <summary>Name of <see cref="CurrentFilePath"/>.</summary>
-    public string FileName => CurrentFilePath is null ? "(untitled)" : Path.GetFileName(CurrentFilePath);
+    /// <summary>Name of <see cref="CurrentFilePath"/>, or what a merged view combines.</summary>
+    public string FileName => MergedFiles switch
+    {
+        { Count: > 1 } merged => $"{Path.GetFileName(merged[0])} + {merged.Count - 1} more",
+        _ => CurrentFilePath is null ? "(untitled)" : Path.GetFileName(CurrentFilePath),
+    };
+
+    /// <summary>The files a merged view combines (FR-O4), in the order they were given; null for a single log.</summary>
+    public IReadOnlyList<string>? MergedFiles { get; private set; }
+
+    /// <summary>The document is a merged view of several files.</summary>
+    public bool IsMerged => MergedFiles is not null;
 
     /// <summary>The format the events were parsed with.</summary>
     public ILogFormat Format { get; }
@@ -72,6 +83,16 @@ public sealed class LogDocument
         return Text.LineNumberAt(e.Offset) - (start == 0 ? 0 : Text.LineNumberAt(start) - 1);
     }
 
+    /// <summary>
+    /// The character offset of <paramref name="e"/> within its own file: stable while the file only grows, whatever else this document holds
+    /// (a merged view, or a rolling log's earlier files). Bookmarks are kept by it (FR-N1).
+    /// </summary>
+    public long OriginalOffset(LogEvent e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        return e.Offset - FileStartOf(e.Offset);
+    }
+
     /// <summary>Number of events with <paramref name="level"/>.</summary>
     public int CountOf(LogLevel level) => _levelCounts[(int)level];
 
@@ -90,6 +111,34 @@ public sealed class LogDocument
         {
             _files.Add((Text.Length, path));
         }
+    }
+
+    /// <summary>
+    /// The text that follows holds several files one after another (a merged view, FR-O4): <paramref name="files"/> say where each starts,
+    /// counted from the end of the text so far. Their line numbers count from each file's start.
+    /// </summary>
+    public void AddMergedFiles(IReadOnlyList<FileSegment> files)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        var start = Text.Length;
+        foreach (var file in files)
+        {
+            if (_files[^1].Start == start + file.Start)
+            {
+                _files[^1] = (start + file.Start, file.Path);
+            }
+            else
+            {
+                _files.Add((start + file.Start, file.Path));
+            }
+        }
+
+        MergedFiles = [.. MergedFiles ?? [], .. files.Select(f => f.Path)];
     }
 
     /// <summary>Removes every event with an id ≥ <see cref="ParseDelta.FirstId"/>, then appends the delta's events.</summary>

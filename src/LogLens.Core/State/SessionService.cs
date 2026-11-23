@@ -45,7 +45,11 @@ public sealed class SessionService
 
     private static SessionState Sanitise(SessionState? session)
     {
-        var tabs = (session?.Tabs ?? []).Where(t => t is not null && t.IsValid()).Take(MaxTabs).ToList();
+        var tabs = (session?.Tabs ?? [])
+            .Where(t => t is not null && t.IsValid())
+            .Select(t => t.MergedFiles is null ? t : t with { Path = null, MergedFiles = [.. t.MergedFiles.Where(f => !string.IsNullOrWhiteSpace(f))] })
+            .Take(MaxTabs)
+            .ToList();
         var selected = tabs.Count == 0 ? 0 : Math.Clamp(session?.Selected ?? 0, 0, tabs.Count - 1);
         return new SessionState { Tabs = tabs, Selected = selected };
     }
@@ -55,7 +59,11 @@ public sealed class SessionService
         public static readonly TabComparer Instance = new();
 
         public bool Equals(SessionTab? x, SessionTab? y)
-            => x is not null && y is not null && string.Equals(x.Path, y.Path, StringComparison.OrdinalIgnoreCase) && x.Follow == y.Follow;
+            => x is not null
+               && y is not null
+               && string.Equals(x.Path, y.Path, StringComparison.OrdinalIgnoreCase)
+               && x.Follow == y.Follow
+               && (x.MergedFiles ?? []).SequenceEqual(y.MergedFiles ?? [], StringComparer.OrdinalIgnoreCase);
 
         public int GetHashCode(SessionTab obj) => 0;
     }

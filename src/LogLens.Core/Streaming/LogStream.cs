@@ -1,4 +1,5 @@
 using LogLens.Core.Formats;
+using LogLens.Core.Merging;
 
 namespace LogLens.Core.Streaming;
 
@@ -29,6 +30,9 @@ public abstract record StreamBatch;
 /// <param name="InitialLoadComplete">True on the batch that ends the first read of the file: everything that was there is now listed.</param>
 /// <param name="FilePath">The file this text came from (it changes when a rolling log moves on to its next file).</param>
 /// <param name="EncodingName">The encoding that file is decoded with (FR-F6).</param>
+/// <param name="MergedFiles">
+/// For a merged view (FR-O4): the text holds these files one after another, each starting at its offset within <paramref name="Text"/>.
+/// </param>
 public sealed record ChunkBatch(
     string Text,
     ParseDelta Delta,
@@ -36,7 +40,8 @@ public sealed record ChunkBatch(
     long FileLength,
     bool InitialLoadComplete,
     string FilePath,
-    string EncodingName) : StreamBatch;
+    string EncodingName,
+    IReadOnlyList<FileSegment>? MergedFiles = null) : StreamBatch;
 
 /// <summary>The file was truncated or replaced: everything listed so far is stale, and the file is read again from the start (FR-T3).</summary>
 public sealed record ResetBatch(string Reason) : StreamBatch;
@@ -83,4 +88,17 @@ public interface ILogStreamFactory
 {
     /// <summary>A stream over <paramref name="path"/>. Nothing is read until <see cref="ILogStream.ReadAsync"/> is enumerated.</summary>
     ILogStream Open(string path);
+
+    /// <summary>
+    /// A merged view of <paramref name="paths"/> (FR-O4): every file is read, then their events are delivered in time order in one batch. It is a
+    /// snapshot and does not follow the files. A file that can't be read fails the whole stream, naming that file.
+    /// </summary>
+    ILogStream OpenMerged(IReadOnlyList<string> paths);
+}
+
+/// <summary>A file of a merged view (FR-O4) could not be read: names the file, and wraps why.</summary>
+public sealed class MergeSourceException(string filePath, Exception innerException)
+    : IOException($"{Path.GetFileName(filePath)}: {innerException?.Message}", innerException)
+{
+    public string FilePath { get; } = filePath;
 }

@@ -35,6 +35,8 @@ public sealed record StreamOptions
 public sealed class FileLogStreamFactory(StreamOptions? options = null) : ILogStreamFactory
 {
     public ILogStream Open(string path) => new FileLogStream(path, options);
+
+    public ILogStream OpenMerged(IReadOnlyList<string> paths) => new MergedLogStream(paths, options?.Format);
 }
 
 /// <summary>

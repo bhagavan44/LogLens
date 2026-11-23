@@ -68,6 +68,23 @@ public sealed partial class LogGrid : UserControl
     /// <summary>Returns the ranges of a row's message to highlight (find bar, FR-S3); null for none. Call <see cref="Refresh"/> after changing it.</summary>
     public Func<string, IReadOnlyList<(int Start, int Length)>>? Highlighter { get; set; }
 
+    /// <summary>Says whether an event is bookmarked, for the row marker (FR-N1). Call <see cref="Refresh"/> after the bookmarks changed.</summary>
+    public Func<LogEvent, bool>? IsBookmarked { get; set; }
+
+    /// <summary>Show each event's file in a Source column (a merged view, FR-O4).</summary>
+    public bool ShowSource
+    {
+        get;
+        set
+        {
+            if (field != value)
+            {
+                field = value;
+                Render();
+            }
+        }
+    }
+
     /// <summary>Re-renders the visible rows; selection and scroll position are kept.</summary>
     public void Refresh() => Render();
 
@@ -256,7 +273,8 @@ public sealed partial class LogGrid : UserControl
                 AutomationProperties.SetPositionInSet(row, index + 1);
                 AutomationProperties.SetSizeOfSet(row, count);
                 row.Visibility = Visibility.Visible;
-                row.Bind(_source[index], _selection.IsSelected(index), focused && index == _selection.Active, Highlighter);
+                var e = _source[index];
+                row.Bind(e, _selection.IsSelected(index), focused && index == _selection.Active, Highlighter, IsBookmarked?.Invoke(e) == true, ShowSource);
             }
             else
             {

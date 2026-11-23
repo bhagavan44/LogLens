@@ -25,7 +25,7 @@ public sealed partial class LogRow : UserControl
         RowRoot.Height = LogFormat.RowHeight;
         TimeColumn.Width = new GridLength(LogFormat.TimeColumnWidth);
         LevelColumn.Width = new GridLength(LogFormat.LevelColumnWidth);
-        foreach (var text in new[] { TimeText, MessageText })
+        foreach (var text in new[] { TimeText, MessageText, SourceText })
         {
             text.FontFamily = LogFormat.TextFont;
             text.FontSize = LogFormat.FontSize;
@@ -43,7 +43,7 @@ public sealed partial class LogRow : UserControl
 
     protected override AutomationPeer OnCreateAutomationPeer() => new LogRowAutomationPeer(this);
 
-    public void Bind(LogEvent e, bool selected, bool active, Func<string, IReadOnlyList<(int Start, int Length)>>? highlighter)
+    public void Bind(LogEvent e, bool selected, bool active, Func<string, IReadOnlyList<(int Start, int Length)>>? highlighter, bool bookmarked, bool showSource)
     {
         var time = LogText.Time(e);
         var message = LogText.FirstLine(e.Message);
@@ -55,6 +55,16 @@ public sealed partial class LogRow : UserControl
         MessageText.Text = message;
         ApplyHighlights(message, highlighter);
         ExceptionIcon.Visibility = e.Exception is null ? Visibility.Collapsed : Visibility.Visible;
+        BookmarkMark.Visibility = bookmarked ? Visibility.Visible : Visibility.Collapsed;
+
+        var source = showSource && e.SourceFile is { } file ? Path.GetFileName(file) : null;
+        if ((SourceText.Visibility == Visibility.Visible) != showSource)
+        {
+            SourceColumn.Width = new GridLength(showSource ? LogFormat.SourceColumnWidth : 0);
+            SourceText.Visibility = showSource ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        SourceText.Text = source ?? string.Empty;
 
         _selected = selected;
         SelectedBg.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
@@ -62,7 +72,9 @@ public sealed partial class LogRow : UserControl
         FocusRect.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
 
         // Screen readers get the level spelled out (UX-5: never colour alone, and "ERR" reads poorly).
-        AutomationProperties.SetName(this, $"{LogText.LevelName(e.Level)}, {time}, {message}{(e.Exception is null ? string.Empty : ", has exception")}");
+        AutomationProperties.SetName(
+            this,
+            $"{(bookmarked ? "Bookmarked, " : string.Empty)}{LogText.LevelName(e.Level)}, {time}, {message}{(e.Exception is null ? string.Empty : ", has exception")}{(source is null ? string.Empty : ", from " + source)}");
     }
 
     private void ApplyHighlights(string text, Func<string, IReadOnlyList<(int Start, int Length)>>? highlighter)

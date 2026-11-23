@@ -106,6 +106,37 @@ public sealed partial class LogViewModel
         ScheduleSearch(TimeSpan.Zero);
     }
 
+    /// <summary>
+    /// "Find all events containing" (FR-N4), for following an order number or request id through a log: lists only the events whose message or
+    /// exception contains <paramref name="text"/> (plain text, any case), with <paramref name="contextEvents"/> events around each. In a merged
+    /// view that covers every file.
+    /// </summary>
+    /// <param name="clearOtherFilters">Drop the level, time and query filters first, so nothing related stays hidden.</param>
+    public void FindAllContaining(string text, int contextEvents = 0, bool clearOtherFilters = true)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        text = text.Trim();
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        if (clearOtherFilters)
+        {
+            ClearFilters();
+        }
+
+        MatchCase = false;
+        WholeWord = false;
+        UseRegex = false;
+        IncludeException = true;
+        ContextEvents = Math.Clamp(contextEvents, 0, MaxContextEvents);
+        SearchText = text;
+        FindBarVisible = true;
+        OnlyMatches = true;
+        ScheduleSearch(TimeSpan.Zero); // now, not after the typing pause the new text started
+    }
+
     private void ScheduleSearch(TimeSpan delay)
     {
         _searchDebounceCancellation?.Cancel();
