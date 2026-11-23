@@ -233,6 +233,7 @@ public sealed partial class LogViewModel : IDisposable
 
     public void Dispose()
     {
+        _bookmarkService.Changed -= OnBookmarkServiceChanged;
         StopLoading();
         _filterCancellation?.Cancel();
         _queueCancellation?.Cancel();
@@ -370,6 +371,12 @@ public sealed partial class LogViewModel : IDisposable
         // Taken before the list changes: appending rows makes the grid report "not at the end" at once.
         var following = FollowLatest;
 
+        if (chunk.MergedFiles is { } files)
+        {
+            Document.AddMergedFiles(files);
+            OnPropertyChanged(nameof(IsMerged));
+        }
+
         Document.Text.Append(chunk.Text);
         Document.EncodingName = chunk.EncodingName;
         Document.FileSizeBytes = chunk.FileLength;
@@ -383,6 +390,7 @@ public sealed partial class LogViewModel : IDisposable
         if (change.Removed > 0 || change.Added > 0)
         {
             RefreshLevelCounts();
+            ResolveBookmarks(change.FirstChangedIndex);
         }
 
         if (added > 0 || removed > 0)
@@ -442,6 +450,7 @@ public sealed partial class LogViewModel : IDisposable
         _matches = [];
         View.SetFilter(_activePredicate is null ? null : []);
         RefreshLevelCounts();
+        ResolveBookmarks(0);
         UpdateSummary();
 
         PendingNewEvents = 0;

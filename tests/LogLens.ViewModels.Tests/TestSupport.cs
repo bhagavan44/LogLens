@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using LogLens.Core.Formats;
+using LogLens.Core.Merging;
 using LogLens.Core.Models;
 using LogLens.Core.State;
 using LogLens.Core.Streaming;
@@ -34,7 +35,7 @@ internal static class TestSupport
     public static MainViewModel Main(FakeStreams streams, MemoryStateStore? store = null)
     {
         store ??= new MemoryStateStore();
-        return new MainViewModel(streams, new RecentFilesService(store), new SessionService(store));
+        return new MainViewModel(streams, new RecentFilesService(store), new SessionService(store), new BookmarkService(store));
     }
 
     /// <summary>A line in the default template for event <paramref name="n"/>.</summary>
@@ -180,13 +181,18 @@ internal sealed class FakeStream(string path) : ILogStream
 internal sealed class FakeStreams : ILogStreamFactory
 {
     private readonly Dictionary<string, Func<FakeStream>> _streams = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _texts = new(StringComparer.OrdinalIgnoreCase);
 
     public List<string> Requested { get; } = [];
 
     public List<FakeStream> Opened { get; } = [];
 
     /// <summary>Opening <paramref name="path"/> loads <paramref name="text"/> at once.</summary>
-    public void Returns(string path, string? text = null) => _streams[path] = () => new FakeStream(path).Load(text ?? TestSupport.Text);
+    public void Returns(string path, string? text = null)
+    {
+        _texts[path] = text ?? TestSupport.Text;
+        _streams[path] = () => new FakeStream(path).Load(text ?? TestSupport.Text);
+    }
 
     /// <summary>Opening <paramref name="path"/> fails with <paramref name="exception"/>.</summary>
     public void Throws(string path, Exception exception) => _streams[path] = () =>
@@ -209,6 +215,26 @@ internal sealed class FakeStreams : ILogStreamFactory
         Requested.Add(path);
         var stream = _streams.TryGetValue(path, out var make) ? make() : Missing(path);
         Opened.Add(stream);
+        return stream;
+    }
+
+    public List<IReadOnlyList<string>> MergeRequests { get; } = [];
+
+    /// <summary>A merged view of files prepared with <see cref="Returns"/>; a file that was not prepared is missing.</summary>
+    public ILogStream OpenMerged(IReadOnlyList<string> paths)
+    {
+        MergeRequests.Add(paths);
+        var stream = new FakeStream(paths[^1]);
+        Opened.Add(stream);
+        if (paths.FirstOrDefault(p => !_texts.ContainsKey(p)) is { } missing)
+        {
+            stream.Fail(new MergeSourceException(missing, new FileNotFoundException("not found", missing)));
+            return stream;
+        }
+
+        var merged = LogMerger.Merge([.. paths.Select(p => TestSupport.Document(_texts[p], p))]);
+        stream.Send(new ChunkBatch(merged.Text, new ParseDelta(0, merged.Events), merged.Text.Length, merged.Text.Length, true, paths[^1], "UTF-8", merged.Files));
+        stream.End();
         return stream;
     }
 
