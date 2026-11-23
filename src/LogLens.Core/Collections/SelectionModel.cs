@@ -63,6 +63,38 @@ public sealed class SelectionModel
         }
     }
 
+    /// <summary>
+    /// <paramref name="count"/> rows were inserted above the first one (new events in a newest-first list): everything selected, the anchor and
+    /// the active row move down with their events. The new rows are not selected.
+    /// </summary>
+    public void InsertAtStart(int count)
+    {
+        if (count <= 0)
+        {
+            return;
+        }
+
+        var shifted = new BitArray(_bits.Length + count);
+        for (var i = 0; i < _bits.Length; i++)
+        {
+            if (_bits[i])
+            {
+                shifted[i + count] = true;
+            }
+        }
+
+        _bits = shifted;
+        if (Anchor >= 0)
+        {
+            Anchor += count;
+        }
+
+        if (Active >= 0)
+        {
+            Active += count;
+        }
+    }
+
     public bool IsSelected(int index) => (uint)index < (uint)_bits.Length && _bits[index];
 
     public void Clear()

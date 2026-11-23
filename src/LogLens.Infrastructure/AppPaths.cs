@@ -53,6 +53,9 @@ public sealed class AppPaths
     /// <summary>Recent files and the open logs.</summary>
     public string StateFile => Path.Combine(RoamingRoot, "state.json");
 
+    /// <summary>View options and the other settings.</summary>
+    public string SettingsFile => Path.Combine(RoamingRoot, "settings.json");
+
     /// <summary>Identifies this profile for single instance: another <c>--data-dir</c> is another LogLens.</summary>
     public string InstanceKey => RoamingRoot;
 }

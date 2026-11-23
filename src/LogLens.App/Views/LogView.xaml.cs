@@ -1,32 +1,46 @@
+using System.ComponentModel;
+using System.Globalization;
+using LogLens.Core.Analysis;
+using LogLens.Core.Collections;
+using LogLens.Core.Export;
+using LogLens.Core.Models;
+using LogLens.Core.Settings;
 using LogLens.ViewModels;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Storage.Pickers;
 using Windows.System;
 using Windows.UI.Core;
 
 namespace LogLens.App.Views;
 
 /// <summary>
-/// One open log: the filter bar, the find bar, the event grid, the detail pane and the status bar. All state lives in
-/// <see cref="LogViewModel"/>; this class only moves focus, reveals rows and copies to the clipboard.
+/// One open log: the filter bar, the find bar, the timeline, the event grid, the detail pane and the status bar. All state lives in
+/// <see cref="LogViewModel"/> and <see cref="SettingsService"/>; this class only moves focus, reveals rows, lays out the columns and copies
+/// to the clipboard.
 /// </summary>
 public sealed partial class LogView : UserControl
 {
     private const int MaxFindAllSeedLength = 200;
 
+    private readonly SettingsService _settings;
+    private ColumnLayout _columns = new();
+    private bool _wrap;
+    private GridMetrics _metrics = GridMetrics.Default;
+    private double _gripStartWidth;
+    private ExportFormat _lastExportFormat = ExportFormat.Csv;
     private bool _autoSelected;
     private bool _loadedBefore;
 
-    public LogView(LogViewModel viewModel)
+    public LogView(LogViewModel viewModel, SettingsService settings)
     {
         ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         InitializeComponent();
 
-        HeaderTimeColumn.Width = new GridLength(LogFormat.TimeColumnWidth);
-        HeaderLevelColumn.Width = new GridLength(LogFormat.LevelColumnWidth);
         MessageBox.FontFamily = LogFormat.TextFont;
         ExceptionBox.FontFamily = LogFormat.CodeFont;
         RawBox.FontFamily = LogFormat.CodeFont;
@@ -35,17 +49,10 @@ public sealed partial class LogView : UserControl
             box.FontSize = LogFormat.FontSize;
         }
 
-        // FR-O4: a merged view shows each event's file.
-        if (viewModel.IsMerged)
-        {
-            HeaderSourceColumn.Width = new GridLength(LogFormat.SourceColumnWidth);
-            HeaderSourceText.Visibility = Visibility.Visible;
-        }
-
-        EventGrid.ShowSource = viewModel.IsMerged;
         EventGrid.IsBookmarked = viewModel.IsBookmarked;
         EventGrid.Source = viewModel.Events;
         EventGrid.AtEndChanged += OnGridAtEndChanged;
+        ApplySettings(settings.Current);
         Loaded += (_, _) =>
         {
             Subscribe();
@@ -60,6 +67,12 @@ public sealed partial class LogView : UserControl
 
     public static Visibility ToVisibilityUnless(bool hidden) => hidden ? Visibility.Collapsed : Visibility.Visible;
 
+    /// <summary>"12,345", for the count of a statistics row.</summary>
+    public static string FormatCount(int count) => count.ToString("N0", CultureInfo.InvariantCulture);
+
+    /// <summary>What a screen reader says for a statistics row.</summary>
+    public static string DescribeGroup(int count, string key) => string.Create(CultureInfo.InvariantCulture, $"{count:N0} times: {key}");
+
     private void Subscribe()
     {
         Unsubscribe();
@@ -69,6 +82,11 @@ public sealed partial class LogView : UserControl
         ViewModel.RowsReset += OnRowsReset;
         ViewModel.ScrollToEndRequested += OnScrollToEndRequested;
         ViewModel.BookmarksChanged += OnBookmarksChanged;
+        ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+
+        // The order, the layout and the rows may have changed while this tab was in the background.
+        SyncOrder();
+        ApplyLayout();
 
         // Rows that arrived before the view was loaded, or while its tab was in the background (where a tail kept following the end).
         var followLatest = ViewModel.FollowLatest;
@@ -91,6 +109,195 @@ public sealed partial class LogView : UserControl
         ViewModel.RowsReset -= OnRowsReset;
         ViewModel.ScrollToEndRequested -= OnScrollToEndRequested;
         ViewModel.BookmarksChanged -= OnBookmarksChanged;
+        ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(LogViewModel.IsMerged))
+        {
+            ApplyLayout(); // a merged view gets its Source column once the files are known
+        }
+        else if (e.PropertyName == nameof(LogViewModel.NewestFirst))
+        {
+            UpdateTimeHeader();
+        }
+    }
+
+    // ------------------------------------------------------------------ view options (settings, FR-G1, FR-G3, FR-G6)
+
+    /// <summary>Takes the view options: the row order, wrapped messages, the timeline and the column layout.</summary>
+    public void ApplySettings(AppSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        _columns = settings.Columns;
+        _wrap = settings.WrapMessages;
+        ViewModel.TimelineVisible = settings.ShowTimeline;
+        ViewModel.NewestFirst = settings.NewestFirst;
+        SyncOrder();
+        ApplyLayout();
+    }
+
+    /// <summary>What the Time column shows (View ▸ Time column, FR-G5).</summary>
+    public TimeColumnMode TimeMode
+    {
+        get;
+        set
+        {
+            field = value;
+            EventGrid.TimeMode = value;
+            UpdateTimeHeader();
+        }
+    }
+
+    /// <summary>The grid reads the list in the view-model's order; a tab that was in the background when the order changed catches up here.</summary>
+    private void SyncOrder()
+    {
+        if (EventGrid.NewestFirst != ViewModel.NewestFirst)
+        {
+            OnFilterApplied(ViewModel, ViewModel.SelectedEvent);
+        }
+
+        UpdateTimeHeader();
+    }
+
+    /// <summary>The Time column's header says what the cells hold, with a down arrow while the newest event is listed first.</summary>
+    private void UpdateTimeHeader() => TimeHeaderText.Text = TimeMode switch
+    {
+        TimeColumnMode.SincePrevious => "Since previous",
+        TimeColumnMode.SinceSelected => "Since selected",
+        _ => "Time",
+    } + (ViewModel.NewestFirst ? " ↓" : string.Empty);
+
+    /// <summary>Sizes the header and the rows to the column layout and the wrap option; a hidden column is 0 wide.</summary>
+    private void ApplyLayout()
+    {
+        _metrics = GridMetrics.For(_columns, _wrap, ViewModel.IsMerged);
+        HeaderTimeColumn.Width = new GridLength(_metrics.TimeColumnWidth);
+        HeaderLevelColumn.Width = new GridLength(_metrics.LevelColumnWidth);
+        HeaderSourceColumn.Width = new GridLength(_metrics.SourceColumnWidth);
+        TimeHeaderText.Visibility = TimeGrip.Visibility = ToVisibility(_metrics.TimeColumnWidth > 0);
+        LevelHeaderText.Visibility = ToVisibility(_metrics.LevelColumnWidth > 0);
+        SourceHeaderText.Visibility = SourceGrip.Visibility = ToVisibility(_metrics.SourceColumnWidth > 0);
+        EventGrid.Metrics = _metrics;
+    }
+
+    // ------------------------------------------------------------------ columns (FR-G1)
+
+    private void OnColumnMenuOpening(object? sender, object e)
+    {
+        ColumnTimeItem.IsChecked = _columns.ShowTime;
+        ColumnLevelItem.IsChecked = _columns.ShowLevel;
+        ColumnSourceItem.IsChecked = _columns.ShowSource;
+        ColumnSourceItem.IsEnabled = ViewModel.IsMerged;
+    }
+
+    private void OnColumnToggleClick(object sender, RoutedEventArgs e)
+        => CommitColumns(_columns with { ShowTime = ColumnTimeItem.IsChecked, ShowLevel = ColumnLevelItem.IsChecked, ShowSource = ColumnSourceItem.IsChecked });
+
+    private void OnColumnResetClick(object sender, RoutedEventArgs e) => CommitColumns(_columns with { TimeWidth = null, SourceWidth = null });
+
+    private double GripWidth(object? grip) => ReferenceEquals(grip, TimeGrip) ? _metrics.TimeColumnWidth : _metrics.SourceColumnWidth;
+
+    private ColumnLayout WithGripWidth(object? grip, double? width)
+        => ReferenceEquals(grip, TimeGrip) ? _columns with { TimeWidth = width } : _columns with { SourceWidth = width };
+
+    private void OnGripDragStarted(object? sender, EventArgs e) => _gripStartWidth = GripWidth(sender);
+
+    // While a header edge is dragged only this tab follows; the layout is saved (and every tab updated) when the drag ends.
+    private void OnGripDragDelta(object? sender, double delta) => PreviewColumns(WithGripWidth(sender, _gripStartWidth + delta));
+
+    private void OnGripDragCompleted(object? sender, EventArgs e) => CommitColumns(_columns);
+
+    private void OnGripNudged(object? sender, double delta) => CommitColumns(WithGripWidth(sender, GripWidth(sender) + delta));
+
+    private void OnGripReset(object? sender, EventArgs e) => CommitColumns(WithGripWidth(sender, null));
+
+    private void PreviewColumns(ColumnLayout layout)
+    {
+        _columns = layout.Normalised();
+        ApplyLayout();
+    }
+
+    private void CommitColumns(ColumnLayout layout)
+    {
+        PreviewColumns(layout);
+        _settings.Update(s => s with { Columns = _columns });
+    }
+
+    // ------------------------------------------------------------------ timeline (FR-N2) and statistics (FR-X1, FR-X2)
+
+    private void OnTimelineRangeSelected(object? sender, (DateTime From, DateTime To) range) => ViewModel.SelectTimeRange(range.From, range.To);
+
+    private void OnTimelineClearRequested(object? sender, EventArgs e) => ViewModel.ClearTime();
+
+    /// <summary>View ▸ Statistics: shows the statistics in the detail pane, or goes back to the message.</summary>
+    public void ToggleStatistics() => DetailTabs.SelectedItem = ViewModel.StatisticsVisible ? MessageTab : StatisticsTab;
+
+    private void OnTopMessageClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is StatGroup group)
+        {
+            ViewModel.ShowOnlyMessage(group);
+        }
+    }
+
+    private void OnTopExceptionClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is StatGroup group)
+        {
+            ViewModel.ShowOnlyException(group);
+        }
+    }
+
+    // ------------------------------------------------------------------ export (FR-E1)
+
+    /// <summary>File ▸ Export: asks for a format and what to export, then for a file, and writes it.</summary>
+    public async Task ExportAsync(IntPtr windowHandle)
+    {
+        var selected = EventGrid.SelectedEvents().ToList();
+        var dialog = new ExportDialog(ViewModel.ExportableCount(), selected.Count, _lastExportFormat) { XamlRoot = XamlRoot, RequestedTheme = ActualTheme };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            EventGrid.Focus(FocusState.Programmatic);
+            return;
+        }
+
+        var format = _lastExportFormat = dialog.Format;
+        var selectionOnly = dialog.SelectionOnly;
+        var picker = new FileSavePicker
+        {
+            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+            SuggestedFileName = Path.GetFileNameWithoutExtension(ViewModel.SuggestedExportName(format, selectionOnly)),
+        };
+        picker.FileTypeChoices.Add(LogExporter.DisplayName(format), [LogExporter.FileExtension(format)]);
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, windowHandle);
+
+        if (await picker.PickSaveFileAsync() is { } file)
+        {
+            try
+            {
+                await using var stream = await file.OpenStreamForWriteAsync();
+                stream.SetLength(0); // overwriting an existing file
+                var written = await ViewModel.ExportAsync(format, stream, selectionOnly ? selected : null);
+                ViewModel.ReportExported(file.Path, written);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                ViewModel.ReportExportFailed(file.Path, ex);
+            }
+        }
+
+        EventGrid.Focus(FocusState.Programmatic);
+    }
+
+    private async void OnCopyMarkdownClick(object sender, RoutedEventArgs e)
+    {
+        var events = EventGrid.SelectedEvents().ToList();
+        if (events.Count > 0)
+        {
+            SetClipboard(await ViewModel.BuildMarkdownAsync(events));
+        }
     }
 
     // ------------------------------------------------------------------ commands (menu and shortcuts)
@@ -272,7 +479,8 @@ public sealed partial class LogView : UserControl
 
     private void OnFilterApplied(object? sender, Core.Models.LogEvent? previouslyActive)
     {
-        // The list was swapped: keep the event the user was looking at in view if it survived the filters.
+        // The list was swapped (or turned round): keep the event the user was looking at in view if it survived the filters.
+        EventGrid.NewestFirst = ViewModel.NewestFirst;
         EventGrid.Source = ViewModel.Events;
         var row = previouslyActive is null ? -1 : ViewModel.View.IndexOf(previouslyActive);
         EventGrid.RevealIndex(row >= 0 ? row : 0);
@@ -280,7 +488,7 @@ public sealed partial class LogView : UserControl
 
     private void OnRowsChanged(object? sender, RowsChange change)
     {
-        EventGrid.RowsChanged(change.FirstRow);
+        EventGrid.RowsChanged(change.FirstRow, change.Removed, change.Added);
 
         // The first rows of a file that is still loading: select the first one so the detail pane has something to show.
         if (EventGrid.ActiveIndex < 0 && EventGrid.RowCount > 0 && !_autoSelected)
@@ -471,7 +679,11 @@ public sealed partial class LogView : UserControl
         MessageBox.Visibility = selected == MessageTab ? Visibility.Visible : Visibility.Collapsed;
         ExceptionBox.Visibility = selected == ExceptionTab ? Visibility.Visible : Visibility.Collapsed;
         RawBox.Visibility = selected == RawTab ? Visibility.Visible : Visibility.Collapsed;
+        StatisticsPanel.Visibility = selected == StatisticsTab ? Visibility.Visible : Visibility.Collapsed;
         CopyExceptionButton.Visibility = ExceptionBox.Visibility;
+
+        // The statistics are only computed (and kept up to date) while they are showing.
+        ViewModel.StatisticsVisible = selected == StatisticsTab;
     }
 
     private void OnCopyRequested(object? sender, bool raw) => CopySelection(raw);

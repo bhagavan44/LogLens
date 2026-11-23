@@ -36,6 +36,29 @@ public sealed partial class LogViewModel : ObservableObject
     /// <summary>What the grid shows: <see cref="View"/>.</summary>
     public IReadOnlyList<LogEvent> Events => View;
 
+    /// <summary>
+    /// List the newest event first (FR-G3). Only the row order changes: filters, bookmarks and event numbers are untouched, the selected event
+    /// stays selected, and new events then arrive at the top of the list.
+    /// </summary>
+    public bool NewestFirst
+    {
+        get => View.NewestFirst;
+        set
+        {
+            if (!View.SetNewestFirst(value))
+            {
+                return;
+            }
+
+            var keep = SelectedEvent;
+            _matches = []; // row numbers: recounted below
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(Events));
+            FilterApplied?.Invoke(this, keep); // the grid reads the list again and keeps the selected event in sight
+            _lastScheduledSearch = RecomputeMatchesAsync();
+        }
+    }
+
     /// <summary>The active row of the grid; the detail pane follows it.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelection), nameof(DetailHeader), nameof(MessageText), nameof(HasException), nameof(ExceptionText), nameof(RawText), nameof(MetadataText))]

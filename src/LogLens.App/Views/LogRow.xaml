@@ -7,7 +7,7 @@
     PointerEntered="OnPointerEntered"
     PointerExited="OnPointerExited">
 
-    <!-- Height, fonts and column widths come from LogFormat; they must match the header in LogView.xaml. -->
+    <!-- Height, widths and message lines come from GridMetrics (LogRow.Apply); they must match the header in LogView.xaml. -->
     <Grid x:Name="RowRoot">
         <!-- Theme-aware state overlays: brushes come from theme resources, opacity does the tinting. -->
         <Border x:Name="HoverBg" Background="{ThemeResource TextFillColorPrimaryBrush}" Opacity="0.06" Visibility="Collapsed" />

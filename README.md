@@ -131,6 +131,40 @@ With tail off, **Refresh** (F5) reads what was written since the file was last r
 
 Files are read as UTF-8, or UTF-16 when they start with a byte-order mark.
 
+### Analyse and export
+
+**Timeline** (*View ▸ Timeline*) draws the events over time above the list, stacked by level, so a burst
+of errors stands out. Drag across it, or click a bar, to show only that time range; the range is outlined
+and the bars outside it are dimmed. With the keyboard, focus it and use the arrow keys (Shift to extend)
+and Enter; Esc clears the range. The bars follow the other filters, so you can still pick another range
+after choosing one.
+
+**Statistics** (*View ▸ Statistics*, or the *Statistics* tab of the detail pane) summarise the events
+currently listed: how many, per level, the time they span, and the most frequent messages and
+exceptions. Numbers, ids and quoted values count as one, so *Order 41 shipped* and *Order 42 shipped* are
+one line. Click a line to show only those events.
+
+**Export** (*File ▸ Export…*, Ctrl+S) writes the events in the list, or just the selected ones, as CSV,
+JSON lines, a self-contained HTML page, the original lines, or a Markdown table. Events are always written
+oldest first. In a CSV, text that starts with `=`, `+`, `-` or `@` gets a leading `'` so a spreadsheet
+never runs it as a formula. Right-click ▸ *Copy as Markdown table* puts the selected events on the clipboard,
+ready for a ticket.
+
+Other *View* options:
+
+- **Newest events first** lists the newest event at the top; new events then arrive there.
+- **Wrap long messages** shows a long message on two lines instead of cutting it off. Every row stays the
+  same height.
+- **Time column** shows each event's time since the previous event, or since the selected one
+  (*+120 ms*, *+3.204 s*), instead of its timestamp. This setting is not remembered.
+- **Columns:** right-click the list header to hide or show the Time, Level and Source columns, and drag a
+  header edge (or focus it and use the arrow keys; Home resets) to resize. The layout, the row order,
+  wrapping and the timeline are remembered.
+
+| Shortcut | Action |
+|---|---|
+| Ctrl+S | Export the events |
+
 ### Command line
 
 ```
@@ -139,16 +173,18 @@ LogLens.exe [--data-dir <folder>] [--new-window] [<log file> ...]
 
 Each file opens in a tab of its own.
 
-- `--data-dir <folder>` keeps the recent files, bookmarks and open tabs in `<folder>\LogLens` instead of
-  `%APPDATA%\LogLens`, for a portable copy or for testing. Each folder is a separate LogLens.
+- `--data-dir <folder>` keeps the settings (view options and column layout), recent files, bookmarks and
+  open tabs in `<folder>\LogLens` instead of `%APPDATA%\LogLens`, for a portable copy or for testing. Each
+  folder is a separate LogLens.
 - `--new-window` starts a separate LogLens instead of handing the file to the running one; it does not
   change what is reopened next time.
 
 ## Privacy
 
 LogLens sends no telemetry and makes no network calls. Logs are only read, opened with sharing so
-the app writing them is never blocked. The only file LogLens writes is `%APPDATA%\LogLens\state.json`
-(the recent files, bookmarks and open tabs).
+the app writing them is never blocked. LogLens writes two files of its own in `%APPDATA%\LogLens`:
+`state.json` (the recent files, bookmarks and open tabs) and `settings.json` (the view options and column
+layout). Anything else is a file you chose to export.
 
 ## Contributing
 

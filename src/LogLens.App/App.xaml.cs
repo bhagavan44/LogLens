@@ -1,5 +1,6 @@
 using LogLens.App.Services;
 using LogLens.Core.Diagnostics;
+using LogLens.Core.Settings;
 using LogLens.Core.State;
 using LogLens.Core.Streaming;
 using LogLens.Infrastructure;
@@ -63,6 +64,8 @@ public partial class App : Application
         var services = new ServiceCollection();
         services.AddSingleton(Program.Paths);
         services.AddSingleton<IStateStore>(sp => new JsonStateStore(sp.GetRequiredService<AppPaths>()));
+        services.AddSingleton<ISettingsStore>(sp => new JsonSettingsStore(sp.GetRequiredService<AppPaths>()));
+        services.AddSingleton(sp => new SettingsService(sp.GetRequiredService<ISettingsStore>()));
         services.AddSingleton(sp => new RecentFilesService(sp.GetRequiredService<IStateStore>()));
         services.AddSingleton(sp => new SessionService(sp.GetRequiredService<IStateStore>()));
         services.AddSingleton(sp => new BookmarkService(sp.GetRequiredService<IStateStore>()));

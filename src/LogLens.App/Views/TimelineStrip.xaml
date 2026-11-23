@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="LogLens.App.Views.TimelineStrip"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="True"
+    UseSystemFocusVisuals="True"
+    KeyDown="OnKeyDown"
+    GotFocus="OnGotFocus"
+    LostFocus="OnLostFocus"
+    AutomationProperties.Name="Timeline histogram"
+    AutomationProperties.HelpText="Events over time, stacked by level. Drag across it, or use the arrow keys (Shift to extend) and Enter, to show only that time range. Escape clears it.">
+
+    <Grid Padding="12,4,12,0" RowSpacing="1">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border
+            Height="44"
+            CornerRadius="4"
+            Background="{ThemeResource LayerFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="1">
+            <Grid
+                x:Name="Surface"
+                Background="Transparent"
+                SizeChanged="OnSizeChanged"
+                PointerPressed="OnPointerPressed"
+                PointerMoved="OnPointerMoved"
+                PointerReleased="OnPointerReleased"
+                PointerCaptureLost="OnPointerCaptureLost"
+                PointerExited="OnPointerExited">
+                <Canvas x:Name="BarsCanvas" IsHitTestVisible="False" />
+                <Canvas x:Name="OverlayCanvas" IsHitTestVisible="False">
+                    <!--
+                        The applied window is an outline, with the bars outside it dimmed: a large translucent fill showed a diagonal
+                        seam in rendered snapshots, and an outline also reads without relying on colour.
+                    -->
+                    <Border x:Name="WindowBand" Visibility="Collapsed" CornerRadius="2" BorderThickness="2" BorderBrush="{ThemeResource AccentFillColorDefaultBrush}" />
+                    <Border x:Name="DragBand" Visibility="Collapsed" CornerRadius="2" BorderThickness="1" BorderBrush="{ThemeResource TextFillColorPrimaryBrush}" />
+                </Canvas>
+                <TextBlock
+                    x:Name="EmptyText"
+                    Text="No events with a time to chart"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    IsHitTestVisible="False" />
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="StartText" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontFamily="Cascadia Mono, Consolas" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+                <TextBlock x:Name="HintText" Text="Drag to show only a time range" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <HyperlinkButton x:Name="ClearButton" Content="Clear time range" Padding="4,0" FontSize="12" Visibility="Collapsed" Click="OnClearClick" />
+            </StackPanel>
+            <TextBlock x:Name="EndText" Grid.Column="2" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontFamily="Cascadia Mono, Consolas" />
+        </Grid>
+    </Grid>
+</UserControl>

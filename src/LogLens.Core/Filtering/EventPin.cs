@@ -16,6 +16,13 @@ public sealed record EventPin(string Label, Func<LogEvent, bool> Predicate)
         return new(key, e => !e.IsUnparsed && MessageNormalizer.Normalize(e.Message) == key);
     }
 
+    /// <summary>Events whose exception normalises to <paramref name="key"/> (statistics, FR-X2).</summary>
+    public static EventPin ForException(string key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return new(key, e => e.Exception is { } exception && MessageNormalizer.Normalize(exception) == key);
+    }
+
     /// <summary>The group <paramref name="e"/> belongs to, or null for an unparsed line (it has no message to group by).</summary>
     public static EventPin? Like(LogEvent e)
     {

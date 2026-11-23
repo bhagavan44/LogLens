@@ -239,6 +239,7 @@ public sealed partial class LogViewModel : IDisposable
         _queueCancellation?.Cancel();
         _searchCancellation?.Cancel();
         _searchDebounceCancellation?.Cancel();
+        _analysisCancellation?.Cancel();
         var stream = _stream;
         _stream = null;
         if (stream is not null)
@@ -402,6 +403,8 @@ public sealed partial class LogViewModel : IDisposable
             {
                 QueueApply(ContextRefreshDelay); // the events after a new match are not known until they arrive: expand again
             }
+
+            ScheduleAnalysis(AnalysisThrottle);
         }
 
         if (IsLoading)
@@ -420,6 +423,7 @@ public sealed partial class LogViewModel : IDisposable
             Document.LoadTime = _loadClock.Elapsed;
             LoadProgress = 1;
             IsLoading = false;
+            ScheduleAnalysis(TimeSpan.Zero); // the statistics wait for the load to finish
             LoadCompleted?.Invoke(this, EventArgs.Empty);
             if (IsFollowing)
             {
@@ -452,6 +456,7 @@ public sealed partial class LogViewModel : IDisposable
         RefreshLevelCounts();
         ResolveBookmarks(0);
         UpdateSummary();
+        ScheduleAnalysis(TimeSpan.Zero);
 
         PendingNewEvents = 0;
         LoadProgress = 0;
