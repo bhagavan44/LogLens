@@ -19,6 +19,7 @@
                 <ColumnDefinition x:Name="LevelColumn" />
                 <ColumnDefinition Width="16" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition x:Name="SourceColumn" Width="0" />
             </Grid.ColumnDefinitions>
 
             <TextBlock x:Name="TimeText" VerticalAlignment="Center" />
@@ -28,7 +29,14 @@
             <FontIcon x:Name="ExceptionIcon" Grid.Column="2" Glyph="&#xE7BA;" FontSize="12" VerticalAlignment="Center"
                       Foreground="{ThemeResource SystemFillColorCautionBrush}" Visibility="Collapsed" />
             <TextBlock x:Name="MessageText" Grid.Column="3" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxLines="1" />
+            <!-- FR-O4: the file of each event, in a merged view only. -->
+            <TextBlock x:Name="SourceText" Grid.Column="4" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxLines="1"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" Visibility="Collapsed" />
         </Grid>
+
+        <!-- FR-N1: a bookmarked event; also said in the row's accessible name. -->
+        <Border x:Name="BookmarkMark" Width="4" HorizontalAlignment="Left" Visibility="Collapsed" IsHitTestVisible="False"
+                Background="{ThemeResource AccentFillColorDefaultBrush}" />
 
         <Border x:Name="FocusRect" Visibility="Collapsed" IsHitTestVisible="False" CornerRadius="3"
                 BorderBrush="{ThemeResource ControlStrongStrokeColorDefaultBrush}" BorderThickness="1" />

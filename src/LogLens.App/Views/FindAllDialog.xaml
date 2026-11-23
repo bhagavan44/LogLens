@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="LogLens.App.Views.FindAllDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Find all events containing"
+    PrimaryButtonText="Find"
+    CloseButtonText="Cancel"
+    DefaultButton="Primary">
+
+    <!-- FR-N4: follow an order number or request id through a log (across every file of a merged view). -->
+    <StackPanel Spacing="12" MinWidth="380">
+        <TextBox
+            x:Name="InputBox"
+            Header="Text to find"
+            PlaceholderText="an order number, request id, user name …"
+            AutomationProperties.Name="Text to find" />
+        <NumberBox
+            x:Name="ContextBox"
+            Header="Events to show before and after each match"
+            Minimum="0"
+            Maximum="100"
+            SpinButtonPlacementMode="Inline"
+            AutomationProperties.Name="Context events around each match" />
+        <CheckBox x:Name="ClearBox" Content="Search the whole log (clear the other filters first)" IsChecked="True" />
+        <TextBlock
+            x:Name="HintText"
+            TextWrapping="Wrap"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+    </StackPanel>
+</ContentDialog>

@@ -65,6 +65,7 @@ public partial class App : Application
         services.AddSingleton<IStateStore>(sp => new JsonStateStore(sp.GetRequiredService<AppPaths>()));
         services.AddSingleton(sp => new RecentFilesService(sp.GetRequiredService<IStateStore>()));
         services.AddSingleton(sp => new SessionService(sp.GetRequiredService<IStateStore>()));
+        services.AddSingleton(sp => new BookmarkService(sp.GetRequiredService<IStateStore>()));
         services.AddSingleton<ILogStreamFactory>(_ => new FileLogStreamFactory());
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();

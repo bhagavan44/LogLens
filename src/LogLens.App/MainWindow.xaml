@@ -14,17 +14,40 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Title bar (the window content extends into it; the tab strip moves here in v0.4). -->
-        <Grid x:Name="AppTitleBar" Height="32" Padding="12,0,0,0" ColumnSpacing="8" Background="Transparent">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <Image Source="ms-appx:///Assets/AppIcon.png" Width="16" Height="16" VerticalAlignment="Center"
-                   AutomationProperties.AccessibilityView="Raw" />
-            <TextBlock x:Name="TitleText" Grid.Column="1" Text="LogLens" VerticalAlignment="Center"
-                       Style="{StaticResource CaptionTextBlockStyle}" TextTrimming="CharacterEllipsis" />
-        </Grid>
+        <!--
+            UX-7: the tab strip is the title bar (FR-O2). The TabView holds only the tabs' headers; the log in front is shown in LogHost below
+            the menu. The footer is the part of the strip that drags the window (SetTitleBar); it is kept at least as wide as the caption
+            buttons (UpdateTitleBarInset), so tabs never run under them.
+        -->
+        <TabView
+            x:Name="Tabs"
+            Height="40"
+            IsAddTabButtonVisible="True"
+            CanReorderTabs="True"
+            CanDragTabs="False"
+            TabWidthMode="SizeToContent"
+            VerticalAlignment="Top"
+            AddTabButtonClick="OnAddTabClick"
+            TabCloseRequested="OnTabCloseRequested"
+            SelectionChanged="OnTabSelectionChanged"
+            TabItemsChanged="OnTabItemsChanged"
+            AutomationProperties.Name="Open logs">
+            <TabView.Resources>
+                <!-- Tabs sit on the bottom edge of the strip. -->
+                <Thickness x:Key="TabViewHeaderPadding">8,8,8,0</Thickness>
+            </TabView.Resources>
+            <TabView.TabStripHeader>
+                <Image Source="ms-appx:///Assets/AppIcon.png" Width="16" Height="16" Margin="12,0,4,6" VerticalAlignment="Bottom"
+                       AutomationProperties.AccessibilityView="Raw" />
+            </TabView.TabStripHeader>
+            <TabView.TabStripFooter>
+                <Grid x:Name="TitleDragRegion" MinWidth="138" MinHeight="40" Background="Transparent">
+                    <!-- With no tab open, the strip still names the app. -->
+                    <TextBlock x:Name="TitleText" Text="LogLens" Margin="8,0,0,0" VerticalAlignment="Center"
+                               Style="{StaticResource CaptionTextBlockStyle}" />
+                </Grid>
+            </TabView.TabStripFooter>
+        </TabView>
 
         <MenuBar Grid.Row="1">
             <MenuBarItem Title="File">
@@ -34,15 +57,24 @@
                         <KeyboardAccelerator Modifiers="Control" Key="O" />
                     </MenuFlyoutItem.KeyboardAccelerators>
                 </MenuFlyoutItem>
+                <MenuFlyoutItem Text="Open folder…" Click="OnOpenFolder">
+                    <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE838;" /></MenuFlyoutItem.Icon>
+                    <MenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Modifiers="Control,Shift" Key="O" />
+                    </MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem Text="Merge files into one view…" Click="OnMergeFiles" />
                 <!-- FR-O1: filled from MainViewModel.RecentFiles. -->
                 <MenuFlyoutSubItem x:Name="RecentMenu" Text="Recent files">
                     <MenuFlyoutSubItem.Icon><FontIcon Glyph="&#xE81C;" /></MenuFlyoutSubItem.Icon>
                 </MenuFlyoutSubItem>
-                <MenuFlyoutItem x:Name="CloseItem" Text="Close" Click="OnClose" IsEnabled="False">
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem x:Name="CloseItem" Text="Close tab" Click="OnClose" IsEnabled="False">
                     <MenuFlyoutItem.KeyboardAccelerators>
                         <KeyboardAccelerator Modifiers="Control" Key="W" />
                     </MenuFlyoutItem.KeyboardAccelerators>
                 </MenuFlyoutItem>
+                <MenuFlyoutItem x:Name="CloseOthersItem" Text="Close other tabs" Click="OnCloseOthers" IsEnabled="False" />
                 <MenuFlyoutSeparator />
                 <MenuFlyoutItem Text="Exit" Click="OnExit" />
             </MenuBarItem>
@@ -61,6 +93,11 @@
                 <MenuFlyoutItem x:Name="FindPreviousItem" Text="Find previous" Click="OnFindPrevious" IsEnabled="False">
                     <MenuFlyoutItem.KeyboardAccelerators>
                         <KeyboardAccelerator Modifiers="Shift" Key="F3" />
+                    </MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem x:Name="FindAllItem" Text="Find all events containing…" Click="OnFindAll" IsEnabled="False">
+                    <MenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Modifiers="Control,Shift" Key="F" />
                     </MenuFlyoutItem.KeyboardAccelerators>
                 </MenuFlyoutItem>
                 <MenuFlyoutSeparator />
@@ -87,6 +124,8 @@
                         <KeyboardAccelerator Key="F5" />
                     </MenuFlyoutItem.KeyboardAccelerators>
                 </MenuFlyoutItem>
+                <MenuFlyoutSeparator />
+                <ToggleMenuFlyoutItem x:Name="BookmarksPanelItem" Text="Bookmarks panel" Click="OnBookmarksPanelClick" IsEnabled="False" />
             </MenuBarItem>
             <MenuBarItem Title="Navigate">
                 <MenuFlyoutItem x:Name="GoToItem" Text="Go to event or time…" Click="OnGoTo" IsEnabled="False">
@@ -105,6 +144,27 @@
                         <KeyboardAccelerator Modifiers="Control,Shift" Key="E" />
                     </MenuFlyoutItem.KeyboardAccelerators>
                 </MenuFlyoutItem>
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem x:Name="ToggleBookmarkItem" Text="Toggle bookmark" Click="OnToggleBookmark" IsEnabled="False">
+                    <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8A4;" /></MenuFlyoutItem.Icon>
+                    <MenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Modifiers="Control" Key="F2" />
+                    </MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem x:Name="NextBookmarkItem" Text="Next bookmark" Click="OnNextBookmark" IsEnabled="False">
+                    <MenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Key="F2" />
+                    </MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem x:Name="PreviousBookmarkItem" Text="Previous bookmark" Click="OnPreviousBookmark" IsEnabled="False">
+                    <MenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Modifiers="Shift" Key="F2" />
+                    </MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem x:Name="ClearBookmarksItem" Text="Clear bookmarks of this log" Click="OnClearBookmarks" IsEnabled="False" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem x:Name="NextTabItem" Text="Next tab" Click="OnNextTab" IsEnabled="False" KeyboardAcceleratorTextOverride="Ctrl+Tab" />
+                <MenuFlyoutItem x:Name="PreviousTabItem" Text="Previous tab" Click="OnPreviousTab" IsEnabled="False" KeyboardAcceleratorTextOverride="Ctrl+Shift+Tab" />
             </MenuBarItem>
             <MenuBarItem Title="Help">
                 <MenuFlyoutItem Text="About LogLens" Click="OnAbout" />
@@ -115,14 +175,15 @@
         <InfoBar x:Name="NoticeBar" Grid.Row="2" Margin="8,0,8,8" IsOpen="False" Closed="OnNoticeClosed" />
 
         <Grid Grid.Row="3">
-            <views:EmptyStateView x:Name="EmptyState" OpenRequested="OnEmptyStateOpen" RecentFileRequested="OnRecentFileRequested" />
+            <views:EmptyStateView x:Name="EmptyState" OpenRequested="OnEmptyStateOpen" OpenFolderRequested="OnEmptyStateOpenFolder"
+                                  RecentFileRequested="OnRecentFileRequested" />
             <ContentControl x:Name="LogHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" IsTabStop="False" />
 
-            <!-- Shown until the file being opened has its first rows; the current log stays meanwhile and the open can be cancelled. -->
+            <!-- Shown until a file being opened has its first rows; the open tabs stay meanwhile and the open can be cancelled. -->
             <Grid x:Name="LoadingOverlay" Visibility="Collapsed" Background="{ThemeResource SmokeFillColorDefaultBrush}">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Padding="24" CornerRadius="8"
                             Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" MinWidth="320">
-                    <TextBlock x:Name="LoadingText" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="LoadingText" TextTrimming="CharacterEllipsis" AutomationProperties.LiveSetting="Polite" />
                     <ProgressBar IsIndeterminate="True" AutomationProperties.Name="Opening" />
                     <Button Content="Cancel" HorizontalAlignment="Right" Click="OnCancelLoad" />
                 </StackPanel>

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="LogLens.App.Views.OpenFolderDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Open folder"
+    PrimaryButtonText="Open in tabs"
+    SecondaryButtonText="Merge into one view"
+    CloseButtonText="Cancel"
+    DefaultButton="Primary"
+    IsPrimaryButtonEnabled="False"
+    IsSecondaryButtonEnabled="False">
+
+    <!-- FR-O3: the log files of a folder, filtered by a pattern; open the chosen ones in tabs or merge them (FR-O4). -->
+    <StackPanel Spacing="10" Width="560">
+        <TextBlock x:Name="FolderText" TextTrimming="CharacterEllipsis" Style="{StaticResource CaptionTextBlockStyle}"
+                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" IsTextSelectionEnabled="True" />
+
+        <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox
+                x:Name="PatternBox"
+                Header="Files matching"
+                PlaceholderText="*.txt;*.log;*.json;*.clef"
+                TextChanged="OnPatternChanged"
+                AutomationProperties.Name="File name pattern"
+                AutomationProperties.HelpText="Wildcards separated by semicolons, for example *.log;app-*.txt" />
+            <CheckBox x:Name="SubfoldersBox" Grid.Column="1" Content="Include subfolders" VerticalAlignment="Bottom"
+                      Checked="OnSubfoldersChanged" Unchecked="OnSubfoldersChanged" />
+        </Grid>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="CountText" VerticalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                       AutomationProperties.LiveSetting="Polite" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                <HyperlinkButton Content="Select all" Padding="6,2" FontSize="12" Click="OnSelectAllClick" />
+                <HyperlinkButton Content="Select none" Padding="6,2" FontSize="12" Click="OnSelectNoneClick" />
+            </StackPanel>
+        </Grid>
+
+        <ListView
+            x:Name="FileList"
+            Height="280"
+            SelectionMode="Multiple"
+            SelectionChanged="OnSelectionChanged"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="4"
+            AutomationProperties.Name="Log files in the folder" />
+
+        <TextBlock
+            Text="Merging puts the chosen files into one list ordered by time, with a Source column. A merged view is a snapshot: it does not follow new events."
+            TextWrapping="Wrap"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        <TextBlock x:Name="ErrorText" Visibility="Collapsed" TextWrapping="Wrap" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+    </StackPanel>
+</ContentDialog>

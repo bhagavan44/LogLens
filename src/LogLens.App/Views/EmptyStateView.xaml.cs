@@ -4,7 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace LogLens.App.Views;
 
-/// <summary>Shown when no file is open (UX-2): the drop zone, an Open button and the recent files.</summary>
+/// <summary>Shown when no file is open (UX-2): the drop zone, the Open buttons and the recent files.</summary>
 public sealed partial class EmptyStateView : UserControl
 {
     public EmptyStateView()
@@ -13,6 +13,9 @@ public sealed partial class EmptyStateView : UserControl
     }
 
     public event EventHandler? OpenRequested;
+
+    /// <summary>Open folder was clicked (FR-O3).</summary>
+    public event EventHandler? OpenFolderRequested;
 
     /// <summary>A recent file was clicked; carries its path.</summary>
     public event EventHandler<string>? RecentFileRequested;
@@ -42,4 +45,6 @@ public sealed partial class EmptyStateView : UserControl
     }
 
     private void OnOpenClick(object sender, RoutedEventArgs e) => OpenRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnOpenFolderClick(object sender, RoutedEventArgs e) => OpenFolderRequested?.Invoke(this, EventArgs.Empty);
 }

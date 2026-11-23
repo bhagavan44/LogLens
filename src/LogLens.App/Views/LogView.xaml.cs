@@ -15,7 +15,10 @@ namespace LogLens.App.Views;
 /// </summary>
 public sealed partial class LogView : UserControl
 {
+    private const int MaxFindAllSeedLength = 200;
+
     private bool _autoSelected;
+    private bool _loadedBefore;
 
     public LogView(LogViewModel viewModel)
     {
@@ -32,6 +35,15 @@ public sealed partial class LogView : UserControl
             box.FontSize = LogFormat.FontSize;
         }
 
+        // FR-O4: a merged view shows each event's file.
+        if (viewModel.IsMerged)
+        {
+            HeaderSourceColumn.Width = new GridLength(LogFormat.SourceColumnWidth);
+            HeaderSourceText.Visibility = Visibility.Visible;
+        }
+
+        EventGrid.ShowSource = viewModel.IsMerged;
+        EventGrid.IsBookmarked = viewModel.IsBookmarked;
         EventGrid.Source = viewModel.Events;
         EventGrid.AtEndChanged += OnGridAtEndChanged;
         Loaded += (_, _) =>
@@ -56,10 +68,18 @@ public sealed partial class LogView : UserControl
         ViewModel.RowsChanged += OnRowsChanged;
         ViewModel.RowsReset += OnRowsReset;
         ViewModel.ScrollToEndRequested += OnScrollToEndRequested;
+        ViewModel.BookmarksChanged += OnBookmarksChanged;
 
-        // Rows that arrived before the view was loaded.
+        // Rows that arrived before the view was loaded, or while its tab was in the background (where a tail kept following the end).
+        var followLatest = ViewModel.FollowLatest;
+        EventGrid.Highlighter = ViewModel.Highlighter;
         OnRowsChanged(ViewModel, new RowsChange(0, 0, ViewModel.Events.Count));
+        if (_loadedBefore && followLatest)
+        {
+            EventGrid.ScrollToEnd();
+        }
 
+        _loadedBefore = true;
         ViewModel.FollowLatest = EventGrid.IsAtEnd;
     }
 
@@ -70,6 +90,7 @@ public sealed partial class LogView : UserControl
         ViewModel.RowsChanged -= OnRowsChanged;
         ViewModel.RowsReset -= OnRowsReset;
         ViewModel.ScrollToEndRequested -= OnScrollToEndRequested;
+        ViewModel.BookmarksChanged -= OnBookmarksChanged;
     }
 
     // ------------------------------------------------------------------ commands (menu and shortcuts)
@@ -125,6 +146,127 @@ public sealed partial class LogView : UserControl
         ViewModel.ClearFilters();
         ContextBox.Value = 0;
     }
+
+    // ------------------------------------------------------------------ bookmarks (FR-N1)
+
+    /// <summary>Ctrl+F2: bookmarks the active event, or removes its bookmark.</summary>
+    public void ToggleBookmark()
+    {
+        if (EventGrid.ActiveEvent is { } active)
+        {
+            ViewModel.ToggleBookmark(active);
+        }
+    }
+
+    /// <summary>F2 / Shift+F2: the next / previous bookmark the filters leave in the list.</summary>
+    public void GoToBookmark(bool forward)
+    {
+        var row = ViewModel.NextBookmarkRow(EventGrid.ActiveIndex, forward);
+        if (row >= 0)
+        {
+            EventGrid.RevealIndex(row);
+            BookmarkHint.Visibility = Visibility.Collapsed;
+        }
+        else if (ViewModel.HasBookmarks)
+        {
+            ShowBookmarkHint("The bookmarked events are hidden by the current filters.");
+        }
+    }
+
+    public void ClearBookmarks() => ViewModel.ClearBookmarks();
+
+    /// <summary>View ▸ Bookmarks: shows or hides the bookmarks panel.</summary>
+    public void ToggleBookmarksPanel() => ViewModel.BookmarksPanelVisible = !ViewModel.BookmarksPanelVisible;
+
+    private void OnBookmarksChanged(object? sender, EventArgs e)
+    {
+        EventGrid.Refresh();
+        BookmarkHint.Visibility = Visibility.Collapsed;
+    }
+
+    private void ShowBookmarkHint(string text)
+    {
+        BookmarkHint.Text = text;
+        BookmarkHint.Visibility = Visibility.Visible;
+        ViewModel.BookmarksPanelVisible = true;
+    }
+
+    private void OnBookmarkItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is not BookmarkItem item)
+        {
+            return;
+        }
+
+        var row = ViewModel.RowOf(item);
+        if (row < 0)
+        {
+            ShowBookmarkHint("This event is hidden by the current filters. Clear the filters to see it.");
+            return;
+        }
+
+        BookmarkHint.Visibility = Visibility.Collapsed;
+        EventGrid.RevealIndex(row);
+        EventGrid.Focus(FocusState.Programmatic);
+    }
+
+    private void OnRemoveBookmarkClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: BookmarkItem item })
+        {
+            ViewModel.RemoveBookmark(item);
+        }
+    }
+
+    private void OnClearBookmarksClick(object sender, RoutedEventArgs e) => ClearBookmarks();
+
+    private void OnCloseBookmarksPanelClick(object sender, RoutedEventArgs e)
+    {
+        ViewModel.BookmarksPanelVisible = false;
+        EventGrid.Focus(FocusState.Programmatic);
+    }
+
+    private void OnRowBookmarkClick(object sender, RoutedEventArgs e) => ToggleBookmark();
+
+    // ------------------------------------------------------------------ find all events containing (FR-N4)
+
+    /// <summary>
+    /// Ctrl+Shift+F: asks what to look for (filled in from the text selected in the detail pane, or the active event's message) and lists every
+    /// event containing it, across every file of a merged view.
+    /// </summary>
+    public async Task FindAllAsync()
+    {
+        var seed = SelectedDetailText() ?? (EventGrid.ActiveEvent is { IsUnparsed: false } active ? Core.Models.LogText.FirstLine(active.Message) : string.Empty);
+        if (seed.Length > MaxFindAllSeedLength)
+        {
+            seed = seed[..MaxFindAllSeedLength];
+        }
+
+        var dialog = new FindAllDialog(seed, ViewModel.ContextEvents, ViewModel.IsMerged) { XamlRoot = XamlRoot, RequestedTheme = ActualTheme };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(dialog.Text))
+        {
+            ViewModel.FindAllContaining(dialog.Text, dialog.ContextEvents, dialog.ClearOtherFilters);
+            ContextBox.Value = ViewModel.ContextEvents;
+        }
+
+        EventGrid.Focus(FocusState.Programmatic);
+    }
+
+    /// <summary>The first line of the text selected in the detail pane, if any.</summary>
+    private string? SelectedDetailText()
+    {
+        foreach (var box in new[] { MessageBox, ExceptionBox, RawBox })
+        {
+            if (box.Visibility == Visibility.Visible && box.SelectedText?.Trim() is { Length: > 0 } selected)
+            {
+                return Core.Models.LogText.FirstLine(selected).Trim();
+            }
+        }
+
+        return null;
+    }
+
+    private async void OnRowFindAllClick(object sender, RoutedEventArgs e) => await FindAllAsync();
 
     // ------------------------------------------------------------------ view-model → grid
 
@@ -283,6 +425,8 @@ public sealed partial class LogView : UserControl
         var parsed = active is { IsUnparsed: false };
         RowShowLikeItem.IsEnabled = RowHideLikeItem.IsEnabled = RowAroundItem.IsEnabled = parsed;
         RowOnlyLevelItem.IsEnabled = RowHideLevelItem.IsEnabled = active is not null && ViewModel.CanFilterByLevel(active.Level);
+        RowBookmarkItem.IsEnabled = active is not null;
+        RowBookmarkItem.Text = active is not null && ViewModel.IsBookmarked(active) ? "Remove bookmark" : "Bookmark";
     }
 
     private void OnRowShowLikeClick(object sender, RoutedEventArgs e)
