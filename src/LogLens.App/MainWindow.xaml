@@ -37,8 +37,14 @@
                 <Thickness x:Key="TabViewHeaderPadding">8,8,8,0</Thickness>
             </TabView.Resources>
             <TabView.TabStripHeader>
-                <Image Source="ms-appx:///Assets/AppIcon.png" Width="16" Height="16" Margin="12,0,4,6" VerticalAlignment="Bottom"
-                       AutomationProperties.AccessibilityView="Raw" />
+                <!-- Decoded at display size (Logical = scale-aware) so the downscale stays sharp. -->
+                <Image Width="20" Height="20" Margin="12,8,6,0" VerticalAlignment="Center"
+                       AutomationProperties.AccessibilityView="Raw">
+                    <Image.Source>
+                        <BitmapImage UriSource="ms-appx:///Assets/AppIcon.png" DecodePixelType="Logical"
+                                     DecodePixelWidth="20" DecodePixelHeight="20" />
+                    </Image.Source>
+                </Image>
             </TabView.TabStripHeader>
             <TabView.TabStripFooter>
                 <Grid x:Name="TitleDragRegion" MinWidth="138" MinHeight="40" Background="Transparent">
