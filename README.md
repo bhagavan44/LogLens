@@ -20,15 +20,27 @@ Requires Windows 10 version 1809 or later, or Windows 11.
 
 ## Using LogLens
 
-**Open a log** with *File ▸ Open* (Ctrl+O), by dropping the file on the window, from *File ▸ Recent
-files* or the list on the start screen, or from the command line (`LogLens.exe C:\logs\app.txt`). Files
-that another program is still writing open without blocking it. Large files load in the background:
-the first rows show at once, the status bar shows the progress, and *Stop* ends the load and keeps
-what was read. One log is shown at a time for now; tabs come in a later version.
+**Open logs** with *File ▸ Open* (Ctrl+O, several files at once if you like), by dropping files on the
+window, from *File ▸ Recent files* or the list on the start screen, or from the command line
+(`LogLens.exe C:\logs\app.txt`). Each file opens in a **tab** of its own in the title bar; opening a file
+that is already open brings its tab to the front. Ctrl+Tab / Ctrl+Shift+Tab switch tabs, Ctrl+W closes
+one, drag a tab to reorder, and right-click a tab for *Close other tabs*. Files that another program is
+still writing open without blocking it. Large files load in the background: the first rows show at
+once, the status bar shows the progress, and *Stop* ends the load and keeps what was read.
+
+**Open folder** (Ctrl+Shift+O, or drop a folder on the window) lists the log files in a folder
+(`*.txt;*.log;*.json;*.clef` by default; change the pattern, or include subfolders) so you can pick
+the ones you want and open them in tabs, or merge them.
+
+A **merged view** (*Open folder ▸ Merge into one view*, or *File ▸ Merge files into one view*) puts the
+events of several files into one list ordered by time, with a *Source* column naming each event's
+file: the logs of several services, or the files of a rolling log, side by side. Files logged in
+different time zones interleave correctly. A merged view is a snapshot: it does not follow the files.
 
 LogLens runs once per user: opening another file from Explorer or the command line while it runs
-opens the file in the running window and brings it to the front. When you start LogLens without a
-file, it reopens the log that was open last time (with tail on if it was on).
+opens the file in a new tab of the running window and brings it to the front. When you start LogLens
+without a file, it reopens the tabs that were open last time, merged views included (with tail on
+where it was on).
 
 The **event list** shows one row per event: time (as logged), level and the first line of the message.
 A ⚠ marks events that carry an exception. Lines before the first event that don't match the format
@@ -63,13 +75,26 @@ The **find bar** (Ctrl+F) highlights matches in the list and counts them (*3 of 
 case, whole word, regular expression, and whether to search exception text too. *Only matches*
 narrows the list to the matching events, with *Context ±* showing that many events around each.
 
+**Find all events containing** (Ctrl+Shift+F, or right-click an event) follows an order number,
+request id or user name through a log: it lists only the events whose message or exception contains
+the text, optionally with a few events around each, and clears the other filters first so nothing
+related stays hidden. Select text in the detail pane first and it is filled in for you. In a merged
+view it covers every file.
+
 **Go to** (Ctrl+G) jumps to an event number or to the first event at or after a time, and Ctrl+E /
 Ctrl+Shift+E jump to the next / previous warning, error or fatal event.
 
+**Bookmarks** mark events to come back to: Ctrl+F2 (or right-click ▸ *Bookmark*) toggles one, and F2 /
+Shift+F2 step through them. *View ▸ Bookmarks panel* lists them with a note you can type for each; click
+one to go to it. Bookmarks are remembered per file, so they are there the next time you open it, also
+in a merged view of that file.
+
 | Shortcut | Action |
 |---|---|
-| Ctrl+O | Open a file |
-| Ctrl+W | Close the log |
+| Ctrl+O | Open files, each in a tab |
+| Ctrl+Shift+O | Open folder |
+| Ctrl+W | Close the tab |
+| Ctrl+Tab / Ctrl+Shift+Tab | Next / previous tab |
 | ↑ ↓ PgUp PgDn Home End | Move through events |
 | Shift / Ctrl + click or arrow | Select several events |
 | Ctrl+A | Select all events |
@@ -79,8 +104,11 @@ Ctrl+Shift+E jump to the next / previous warning, error or fatal event.
 | F3 / Shift+F3 (or Enter / Shift+Enter in the find box) | Next / previous match |
 | Esc (in the find box) | Close the find bar |
 | Ctrl+L | Go to the query bar; Enter applies at once, Esc clears it |
+| Ctrl+Shift+F | Find all events containing a text |
 | Ctrl+G | Go to an event number or a time |
 | Ctrl+E / Ctrl+Shift+E | Next / previous warning or error |
+| Ctrl+F2 | Bookmark the event (or remove its bookmark) |
+| F2 / Shift+F2 | Next / previous bookmark |
 
 ### Live logs
 
@@ -106,10 +134,12 @@ Files are read as UTF-8, or UTF-16 when they start with a byte-order mark.
 ### Command line
 
 ```
-LogLens.exe [--data-dir <folder>] [--new-window] [<log file>]
+LogLens.exe [--data-dir <folder>] [--new-window] [<log file> ...]
 ```
 
-- `--data-dir <folder>` keeps the recent files and the open log in `<folder>\LogLens` instead of
+Each file opens in a tab of its own.
+
+- `--data-dir <folder>` keeps the recent files, bookmarks and open tabs in `<folder>\LogLens` instead of
   `%APPDATA%\LogLens`, for a portable copy or for testing. Each folder is a separate LogLens.
 - `--new-window` starts a separate LogLens instead of handing the file to the running one; it does not
   change what is reopened next time.
@@ -118,7 +148,7 @@ LogLens.exe [--data-dir <folder>] [--new-window] [<log file>]
 
 LogLens sends no telemetry and makes no network calls. Logs are only read, opened with sharing so
 the app writing them is never blocked. The only file LogLens writes is `%APPDATA%\LogLens\state.json`
-(the recent files and the open log).
+(the recent files, bookmarks and open tabs).
 
 ## Contributing
 
