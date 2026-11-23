@@ -12,7 +12,8 @@ public sealed class TextStore
 
     private readonly List<string> _chunks = [];
     private readonly List<long> _starts = [];
-    private long[]? _lineStarts;
+    private readonly List<long> _lineStarts = [0];
+    private long _indexedUpTo;
 
     /// <summary>Total number of characters.</summary>
     public long Length { get; private set; }
@@ -38,7 +39,6 @@ public sealed class TextStore
         }
 
         Length += text.Length;
-        _lineStarts = null;
     }
 
     public void Clear()
@@ -46,7 +46,9 @@ public sealed class TextStore
         _chunks.Clear();
         _starts.Clear();
         Length = 0;
-        _lineStarts = null;
+        _lineStarts.Clear();
+        _lineStarts.Add(0);
+        _indexedUpTo = 0;
     }
 
     /// <summary>The characters in <c>[start, start + length)</c>.</summary>
@@ -86,8 +88,8 @@ public sealed class TextStore
     }
 
     /// <summary>
-    /// The 1-based line number of the character at <paramref name="offset"/> (FR-D4). The first call builds an index of line starts
-    /// (8 bytes per line); later calls are a binary search.
+    /// The 1-based line number of the character at <paramref name="offset"/> (FR-D4). Uses an index of line starts (8 bytes per line) that is
+    /// extended over newly appended text when needed, so a growing log is never re-scanned from its start; then a binary search.
     /// </summary>
     public int LineNumberAt(long offset)
     {
@@ -96,26 +98,30 @@ public sealed class TextStore
             throw new ArgumentOutOfRangeException(nameof(offset));
         }
 
-        _lineStarts ??= BuildLineStarts();
-        var index = Array.BinarySearch(_lineStarts, offset);
+        ExtendLineIndex();
+        var index = _lineStarts.BinarySearch(offset);
         return (index >= 0 ? index : ~index - 1) + 1;
     }
 
-    private long[] BuildLineStarts()
+    private void ExtendLineIndex()
     {
-        var starts = new List<long> { 0 };
-        for (var c = 0; c < _chunks.Count; c++)
+        if (_indexedUpTo == Length)
+        {
+            return;
+        }
+
+        for (var c = ChunkAt(_indexedUpTo); c < _chunks.Count; c++)
         {
             var chunk = _chunks[c];
-            var pos = chunk.IndexOf('\n');
+            var pos = chunk.IndexOf('\n', (int)Math.Max(0, _indexedUpTo - _starts[c]));
             while (pos >= 0)
             {
-                starts.Add(_starts[c] + pos + 1);
+                _lineStarts.Add(_starts[c] + pos + 1);
                 pos = chunk.IndexOf('\n', pos + 1);
             }
         }
 
-        return [.. starts];
+        _indexedUpTo = Length;
     }
 
     private int ChunkAt(long start)

@@ -15,6 +15,8 @@ namespace LogLens.App.Views;
 /// </summary>
 public sealed partial class LogView : UserControl
 {
+    private bool _autoSelected;
+
     public LogView(LogViewModel viewModel)
     {
         ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
@@ -31,19 +33,44 @@ public sealed partial class LogView : UserControl
         }
 
         EventGrid.Source = viewModel.Events;
-        viewModel.FilterApplied += OnFilterApplied;
-        viewModel.SearchChanged += OnSearchChanged;
-        Loaded += (_, _) => EventGrid.Focus(FocusState.Programmatic);
-        Unloaded += (_, _) =>
+        EventGrid.AtEndChanged += OnGridAtEndChanged;
+        Loaded += (_, _) =>
         {
-            viewModel.FilterApplied -= OnFilterApplied;
-            viewModel.SearchChanged -= OnSearchChanged;
+            Subscribe();
+            EventGrid.Focus(FocusState.Programmatic);
         };
+        Unloaded += (_, _) => Unsubscribe();
     }
 
     public LogViewModel ViewModel { get; }
 
     public static Visibility ToVisibility(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
+
+    public static Visibility ToVisibilityUnless(bool hidden) => hidden ? Visibility.Collapsed : Visibility.Visible;
+
+    private void Subscribe()
+    {
+        Unsubscribe();
+        ViewModel.FilterApplied += OnFilterApplied;
+        ViewModel.SearchChanged += OnSearchChanged;
+        ViewModel.RowsChanged += OnRowsChanged;
+        ViewModel.RowsReset += OnRowsReset;
+        ViewModel.ScrollToEndRequested += OnScrollToEndRequested;
+
+        // Rows that arrived before the view was loaded.
+        OnRowsChanged(ViewModel, new RowsChange(0, 0, ViewModel.Events.Count));
+
+        ViewModel.FollowLatest = EventGrid.IsAtEnd;
+    }
+
+    private void Unsubscribe()
+    {
+        ViewModel.FilterApplied -= OnFilterApplied;
+        ViewModel.SearchChanged -= OnSearchChanged;
+        ViewModel.RowsChanged -= OnRowsChanged;
+        ViewModel.RowsReset -= OnRowsReset;
+        ViewModel.ScrollToEndRequested -= OnScrollToEndRequested;
+    }
 
     // ------------------------------------------------------------------ commands (menu and shortcuts)
 
@@ -108,6 +135,38 @@ public sealed partial class LogView : UserControl
         var row = previouslyActive is null ? -1 : ViewModel.View.IndexOf(previouslyActive);
         EventGrid.RevealIndex(row >= 0 ? row : 0);
     }
+
+    private void OnRowsChanged(object? sender, RowsChange change)
+    {
+        EventGrid.RowsChanged(change.FirstRow);
+
+        // The first rows of a file that is still loading: select the first one so the detail pane has something to show.
+        if (EventGrid.ActiveIndex < 0 && EventGrid.RowCount > 0 && !_autoSelected)
+        {
+            _autoSelected = true;
+            EventGrid.RevealIndex(0);
+        }
+    }
+
+    private void OnRowsReset(object? sender, EventArgs e)
+    {
+        _autoSelected = false;
+        EventGrid.Source = ViewModel.Events;
+    }
+
+    private void OnScrollToEndRequested(object? sender, EventArgs e) => EventGrid.ScrollToEnd();
+
+    private void OnGridAtEndChanged(object? sender, bool atEnd) => ViewModel.FollowLatest = atEnd;
+
+    private void OnJumpToLatestClick(object sender, RoutedEventArgs e)
+    {
+        ViewModel.JumpToLatest();
+        EventGrid.Focus(FocusState.Programmatic);
+    }
+
+    private void OnRefreshClick(object sender, RoutedEventArgs e) => ViewModel.Refresh();
+
+    private void OnStopLoadingClick(object sender, RoutedEventArgs e) => ViewModel.StopLoading();
 
     private void OnSearchChanged(object? sender, EventArgs e)
     {

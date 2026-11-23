@@ -19,7 +19,8 @@ public sealed class SerilogTextFormat : ILogFormat
 
     public LogFields Fields => _template.HasSourceContext ? LogFields.Exception | LogFields.SourceContext : LogFields.Exception;
 
-    public ILogParser CreateParser(string? sourceFile) => new SerilogTextParser(_template, sourceFile);
+    public ILogParser CreateParser(string? sourceFile, long startOffset = 0, int firstId = 0)
+        => new SerilogTextParser(_template, sourceFile, startOffset, firstId);
 }
 
 /// <summary>
@@ -33,16 +34,20 @@ public sealed class SerilogTextParser : ILogParser
     private string _carry = string.Empty;
     private long _carryOffset;
 
-    public SerilogTextParser(OutputTemplate? template = null, string? sourceFile = null)
+    public SerilogTextParser(OutputTemplate? template = null, string? sourceFile = null, long startOffset = 0, int firstId = 0)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(startOffset);
+        ArgumentOutOfRangeException.ThrowIfNegative(firstId);
         _parser = new PlainTextLogParser(template);
         _sourceFile = sourceFile;
+        _carryOffset = startOffset;
+        CommittedId = firstId;
     }
 
-    /// <summary>Events with a lower id are final; this id and above are provisional (the event still open).</summary>
     public int CommittedId { get; private set; }
 
-    /// <summary>True when the text held back ends in the middle of a line.</summary>
+    public long EndOffset => _carryOffset + _carry.Length;
+
     public bool HasPartialLine => _carry.Length > 0 && _carry[^1] != '\n';
 
     public ParseDelta Append(string text, CancellationToken cancellationToken = default)
@@ -57,6 +62,12 @@ public sealed class SerilogTextParser : ILogParser
         _carry = result.CarryFrom >= work.Length ? string.Empty : work[result.CarryFrom..];
         CommittedId = result.EndsOpen ? result.Events[^1].Id : first + result.Events.Count;
         return new ParseDelta(first, result.Events);
+    }
+
+    public ParseDelta Preview()
+    {
+        var result = _parser.ParseChunk(_carry, _carryOffset, CommittedId, _sourceFile, final: true);
+        return new ParseDelta(CommittedId, result.Events);
     }
 
     public ParseDelta Complete()

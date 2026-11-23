@@ -167,6 +167,7 @@ public sealed partial class LogViewModel
         }
         else
         {
+            BeginPass(); // the list must not grow under the worker
             try
             {
                 var view = View;
@@ -182,10 +183,49 @@ public sealed partial class LogViewModel
             {
                 return; // a newer search (started after a newer filter pass) replaced this one
             }
+            finally
+            {
+                EndPass();
+            }
         }
 
         UpdateSummary();
         SearchChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Rows changed at the end of the list (new events, or the last event extended): drop the matches from <paramref name="firstRow"/> on and
+    /// test the rows there now, so "n of m" and F3 stay right without searching the whole list again.
+    /// </summary>
+    private void UpdateMatchesAfterSync(int firstRow, int rowsRemoved, int rowsAdded)
+    {
+        if (CurrentMatcher is not { } matcher || (rowsRemoved == 0 && rowsAdded == 0))
+        {
+            return;
+        }
+
+        var keep = _matches.Length;
+        while (keep > 0 && _matches[keep - 1] >= firstRow)
+        {
+            keep--;
+        }
+
+        List<int>? extra = null;
+        for (var row = firstRow; row < firstRow + rowsAdded && row < View.Count; row++)
+        {
+            if (matcher.IsMatch(View[row]))
+            {
+                (extra ??= []).Add(row);
+            }
+        }
+
+        if (keep == _matches.Length && extra is null)
+        {
+            return;
+        }
+
+        _matches = [.. _matches.AsSpan(0, keep), .. (extra ?? [])];
+        UpdateSummary();
     }
 
     /// <summary>The row to move to for F3 (<paramref name="forward"/>) or Shift+F3, wrapping around; -1 when there are no matches.</summary>

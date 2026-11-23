@@ -34,6 +34,10 @@
                         <KeyboardAccelerator Modifiers="Control" Key="O" />
                     </MenuFlyoutItem.KeyboardAccelerators>
                 </MenuFlyoutItem>
+                <!-- FR-O1: filled from MainViewModel.RecentFiles. -->
+                <MenuFlyoutSubItem x:Name="RecentMenu" Text="Recent files">
+                    <MenuFlyoutSubItem.Icon><FontIcon Glyph="&#xE81C;" /></MenuFlyoutSubItem.Icon>
+                </MenuFlyoutSubItem>
                 <MenuFlyoutItem x:Name="CloseItem" Text="Close" Click="OnClose" IsEnabled="False">
                     <MenuFlyoutItem.KeyboardAccelerators>
                         <KeyboardAccelerator Modifiers="Control" Key="W" />
@@ -68,6 +72,22 @@
                 </MenuFlyoutItem>
                 <MenuFlyoutItem x:Name="ClearFiltersItem" Text="Clear all filters" Click="OnClearFilters" IsEnabled="False" />
             </MenuBarItem>
+            <MenuBarItem Title="View">
+                <ToggleMenuFlyoutItem x:Name="TailItem" Text="Tail" Click="OnTailClick" IsEnabled="False">
+                    <ToggleMenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Modifiers="Control" Key="T" />
+                    </ToggleMenuFlyoutItem.KeyboardAccelerators>
+                </ToggleMenuFlyoutItem>
+                <ToggleMenuFlyoutItem x:Name="PauseItem" Text="Pause tail" Click="OnPauseClick" IsEnabled="False" />
+                <ToggleMenuFlyoutItem x:Name="FollowRolledItem" Text="Follow the next file of a rolling log" Click="OnFollowRolledClick" IsEnabled="False" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem x:Name="RefreshItem" Text="Refresh" Click="OnRefreshClick" IsEnabled="False">
+                    <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE72C;" /></MenuFlyoutItem.Icon>
+                    <MenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Key="F5" />
+                    </MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+            </MenuBarItem>
             <MenuBarItem Title="Navigate">
                 <MenuFlyoutItem x:Name="GoToItem" Text="Go to event or time…" Click="OnGoTo" IsEnabled="False">
                     <MenuFlyoutItem.KeyboardAccelerators>
@@ -95,15 +115,15 @@
         <InfoBar x:Name="NoticeBar" Grid.Row="2" Margin="8,0,8,8" IsOpen="False" Closed="OnNoticeClosed" />
 
         <Grid Grid.Row="3">
-            <views:EmptyStateView x:Name="EmptyState" OpenRequested="OnEmptyStateOpen" />
+            <views:EmptyStateView x:Name="EmptyState" OpenRequested="OnEmptyStateOpen" RecentFileRequested="OnRecentFileRequested" />
             <ContentControl x:Name="LogHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" IsTabStop="False" />
 
-            <!-- The file loads on a worker thread; the window stays responsive and the load can be cancelled. -->
+            <!-- Shown until the file being opened has its first rows; the current log stays meanwhile and the open can be cancelled. -->
             <Grid x:Name="LoadingOverlay" Visibility="Collapsed" Background="{ThemeResource SmokeFillColorDefaultBrush}">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Padding="24" CornerRadius="8"
                             Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" MinWidth="320">
                     <TextBlock x:Name="LoadingText" TextTrimming="CharacterEllipsis" />
-                    <ProgressBar x:Name="LoadingProgress" Maximum="1" AutomationProperties.Name="Loading progress" />
+                    <ProgressBar IsIndeterminate="True" AutomationProperties.Name="Opening" />
                     <Button Content="Cancel" HorizontalAlignment="Right" Click="OnCancelLoad" />
                 </StackPanel>
             </Grid>

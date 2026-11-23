@@ -22,8 +22,10 @@ public sealed partial class LevelToggle : ObservableObject
 
     public LogLevel Level { get; }
 
-    /// <summary>Number of events with this level.</summary>
-    public int Count { get; }
+    /// <summary>Number of events with this level; grows while the log loads or is tailed.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CountText), nameof(Description))]
+    public partial int Count { get; internal set; }
 
     /// <summary>Short text on the button; never colour alone (UX-5).</summary>
     public string Label => Level == LogLevel.Unparsed ? "Unparsed" : LogText.LevelAbbreviation(Level);
