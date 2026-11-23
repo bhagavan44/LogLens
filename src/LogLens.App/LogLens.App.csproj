@@ -50,7 +50,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.15" />
   </ItemGroup>
 
-  <!-- Regenerate with build/make-icon.ps1. The .ico is also embedded in the exe (ApplicationIcon). -->
+  <!-- Generated from build/logo.png by build/make-icon.ps1. The .ico is also embedded in the exe (ApplicationIcon). -->
   <ItemGroup>
     <Content Include="Assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\AppIcon.png" CopyToOutputDirectory="PreserveNewest" />
