@@ -69,6 +69,13 @@
                     <MenuFlyoutSubItem.Icon><FontIcon Glyph="&#xE81C;" /></MenuFlyoutSubItem.Icon>
                 </MenuFlyoutSubItem>
                 <MenuFlyoutSeparator />
+                <MenuFlyoutItem x:Name="ExportItem" Text="Export…" Click="OnExport" IsEnabled="False">
+                    <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE74E;" /></MenuFlyoutItem.Icon>
+                    <MenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Modifiers="Control" Key="S" />
+                    </MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutSeparator />
                 <MenuFlyoutItem x:Name="CloseItem" Text="Close tab" Click="OnClose" IsEnabled="False">
                     <MenuFlyoutItem.KeyboardAccelerators>
                         <KeyboardAccelerator Modifiers="Control" Key="W" />
@@ -126,6 +133,17 @@
                 </MenuFlyoutItem>
                 <MenuFlyoutSeparator />
                 <ToggleMenuFlyoutItem x:Name="BookmarksPanelItem" Text="Bookmarks panel" Click="OnBookmarksPanelClick" IsEnabled="False" />
+                <MenuFlyoutSeparator />
+                <ToggleMenuFlyoutItem x:Name="TimelineItem" Text="Timeline" Click="OnTimelineClick" />
+                <ToggleMenuFlyoutItem x:Name="StatisticsItem" Text="Statistics" Click="OnStatisticsClick" IsEnabled="False" />
+                <MenuFlyoutSeparator />
+                <ToggleMenuFlyoutItem x:Name="NewestFirstItem" Text="Newest events first" Click="OnNewestFirstClick" />
+                <ToggleMenuFlyoutItem x:Name="WrapItem" Text="Wrap long messages" Click="OnWrapClick" />
+                <MenuFlyoutSubItem x:Name="TimeColumnMenu" Text="Time column" IsEnabled="False">
+                    <RadioMenuFlyoutItem x:Name="TimeTimestampItem" Text="Timestamp" GroupName="TimeColumn" IsChecked="True" Tag="Timestamp" Click="OnTimeModeClick" />
+                    <RadioMenuFlyoutItem x:Name="TimeSincePreviousItem" Text="Time since the previous event" GroupName="TimeColumn" Tag="SincePrevious" Click="OnTimeModeClick" />
+                    <RadioMenuFlyoutItem x:Name="TimeSinceSelectedItem" Text="Time since the selected event" GroupName="TimeColumn" Tag="SinceSelected" Click="OnTimeModeClick" />
+                </MenuFlyoutSubItem>
             </MenuBarItem>
             <MenuBarItem Title="Navigate">
                 <MenuFlyoutItem x:Name="GoToItem" Text="Go to event or time…" Click="OnGoTo" IsEnabled="False">

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="LogLens.App.Views.ExportDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Export events"
+    PrimaryButtonText="Save…"
+    CloseButtonText="Cancel"
+    DefaultButton="Primary">
+
+    <!-- FR-E1: the listed events (all filters applied) or just the selected rows, in one of five formats. -->
+    <StackPanel Spacing="14" MinWidth="380">
+        <ComboBox
+            x:Name="FormatBox"
+            Header="Format"
+            HorizontalAlignment="Stretch"
+            SelectionChanged="OnFormatChanged"
+            AutomationProperties.Name="Export format" />
+
+        <RadioButtons x:Name="ScopeButtons" Header="What to export" AutomationProperties.Name="What to export">
+            <RadioButton x:Name="ListedRadio" />
+            <RadioButton x:Name="SelectedRadio" />
+        </RadioButtons>
+
+        <TextBlock
+            x:Name="FormatHint"
+            TextWrapping="Wrap"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+    </StackPanel>
+</ContentDialog>

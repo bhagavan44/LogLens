@@ -28,11 +28,53 @@ public sealed partial class LogGrid : UserControl
     private readonly GridViewport _viewport = new();
     private readonly SelectionModel _selection = new();
     private IReadOnlyList<LogEvent>? _source;
+    private GridMetrics _metrics = GridMetrics.Default;
+    private Windows.Foundation.Size _hostSize;
+    private LogEvent? _lastActive;
     private bool _syncingScrollBar;
 
     public LogGrid()
     {
         InitializeComponent();
+    }
+
+    /// <summary>
+    /// Row height and column widths (FR-G1, FR-G6). Every row has this one height, also when long messages wrap, so the grid still counts rows.
+    /// Selection and scroll position are kept.
+    /// </summary>
+    public GridMetrics Metrics
+    {
+        get => _metrics;
+        set
+        {
+            if (_metrics == value)
+            {
+                return;
+            }
+
+            _metrics = value;
+            if (_hostSize.Height > 0)
+            {
+                Layout(_hostSize);
+            }
+        }
+    }
+
+    /// <summary>The rows run from the newest event down (FR-G3): new events arrive at the top. Set before the source is replaced.</summary>
+    public bool NewestFirst { get; set; }
+
+    /// <summary>What the Time column shows (FR-G5).</summary>
+    public TimeColumnMode TimeMode
+    {
+        get;
+        set
+        {
+            if (field != value)
+            {
+                field = value;
+                Render();
+            }
+        }
     }
 
     /// <summary>Raised when the active row or the set of selected rows changes.</summary>
@@ -71,30 +113,47 @@ public sealed partial class LogGrid : UserControl
     /// <summary>Says whether an event is bookmarked, for the row marker (FR-N1). Call <see cref="Refresh"/> after the bookmarks changed.</summary>
     public Func<LogEvent, bool>? IsBookmarked { get; set; }
 
-    /// <summary>Show each event's file in a Source column (a merged view, FR-O4).</summary>
-    public bool ShowSource
-    {
-        get;
-        set
-        {
-            if (field != value)
-            {
-                field = value;
-                Render();
-            }
-        }
-    }
-
     /// <summary>Re-renders the visible rows; selection and scroll position are kept.</summary>
     public void Refresh() => Render();
 
     /// <summary>
-    /// The source changed from row <paramref name="firstRow"/> on (rows appended, or the last ones replaced, while a log loads or is tailed):
-    /// the scroll position and the selection are kept.
+    /// The source changed (rows appended, or the last ones replaced, while a log loads or is tailed): the scroll position and the selection
+    /// are kept. Oldest first the change is at <paramref name="firstRow"/>; newest first it is at the top, where <paramref name="removed"/>
+    /// rows went and <paramref name="added"/> came, and every other row moved down with its event.
     /// </summary>
-    public void RowsChanged(int firstRow)
+    public void RowsChanged(int firstRow, int removed, int added)
     {
         var count = RowCount;
+        if (NewestFirst)
+        {
+            // The selection moves with its events; the rows on screen stay put unless the newest event is showing, in which case the
+            // new ones come into view.
+            var inserted = count - _selection.ItemCount;
+            var atLatest = _viewport.First == 0;
+            if (inserted > 0)
+            {
+                _selection.InsertAtStart(inserted);
+            }
+            else
+            {
+                _selection.Resize(count);
+            }
+
+            _viewport.Configure(count, _viewport.VisibleRows);
+            if (inserted > 0 && !atLatest)
+            {
+                _viewport.ScrollBy(inserted);
+            }
+
+            Render();
+            if (!ReferenceEquals(ActiveEvent, _lastActive))
+            {
+                RaiseSelectionChanged(); // the active event object was replaced: the detail pane re-reads it
+            }
+
+            return;
+        }
+
         var activeAffected = _selection.Active >= firstRow;
         _selection.Resize(count);
         _viewport.Configure(count, _viewport.VisibleRows);
@@ -105,16 +164,16 @@ public sealed partial class LogGrid : UserControl
         }
     }
 
-    /// <summary>The last row is in view, so rows added at the end show on screen (FR-T2).</summary>
+    /// <summary>The newest event's row is in view (the last row, or the first when newest first), so new events show on screen (FR-T2).</summary>
     public bool IsAtEnd { get; private set; } = true;
 
-    /// <summary>Raised when the view moves to or away from the last row (scrolling, or the list growing).</summary>
+    /// <summary>Raised when the view moves to or away from the newest event (scrolling, or the list growing).</summary>
     public event EventHandler<bool>? AtEndChanged;
 
-    /// <summary>Scrolls so the last row is in view; the selection stays.</summary>
+    /// <summary>Scrolls so the newest event is in view (the last row, or the first when newest first); the selection stays.</summary>
     public void ScrollToEnd()
     {
-        _viewport.ScrollTo(_viewport.MaxFirst);
+        _viewport.ScrollTo(NewestFirst ? 0 : _viewport.MaxFirst);
         Render();
     }
 
@@ -152,6 +211,7 @@ public sealed partial class LogGrid : UserControl
     /// <summary>Tells listeners (the detail pane) and screen readers that the active row or the selection changed.</summary>
     private void RaiseSelectionChanged()
     {
+        _lastActive = ActiveEvent;
         SelectionChanged?.Invoke(this, EventArgs.Empty);
 
         // Keyboard focus stays on the grid itself; announce the active row as the focused item so Narrator reads it.
@@ -227,12 +287,15 @@ public sealed partial class LogGrid : UserControl
 
     // ------------------------------------------------------------------ layout
 
-    private void OnHostSizeChanged(object sender, SizeChangedEventArgs e)
+    private void OnHostSizeChanged(object sender, SizeChangedEventArgs e) => Layout(e.NewSize);
+
+    private void Layout(Windows.Foundation.Size size)
     {
-        var size = e.NewSize;
+        _hostSize = size;
         RowsHost.Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(0, 0, size.Width, size.Height) };
 
-        var visible = Math.Max(1, (int)(size.Height / LogFormat.RowHeight));
+        var rowHeight = _metrics.RowHeight;
+        var visible = Math.Max(1, (int)(size.Height / rowHeight));
         _viewport.Configure(RowCount, visible);
 
         // One extra row so a partially visible row at the bottom is drawn too.
@@ -240,7 +303,6 @@ public sealed partial class LogGrid : UserControl
         while (_pool.Count < needed)
         {
             var row = new LogRow { Owner = this };
-            Canvas.SetTop(row, _pool.Count * LogFormat.RowHeight);
             _pool.Add(row);
             RowsHost.Children.Add(row);
         }
@@ -251,9 +313,11 @@ public sealed partial class LogGrid : UserControl
             _pool.RemoveAt(_pool.Count - 1);
         }
 
-        foreach (var row in _pool)
+        for (var i = 0; i < _pool.Count; i++)
         {
-            row.Width = size.Width;
+            _pool[i].Width = size.Width;
+            _pool[i].Apply(_metrics);
+            Canvas.SetTop(_pool[i], i * rowHeight);
         }
 
         Render();
@@ -263,6 +327,11 @@ public sealed partial class LogGrid : UserControl
     {
         var count = RowCount;
         var focused = FocusState != FocusState.Unfocused;
+        var mode = TimeMode;
+        var selectedReference = mode == TimeColumnMode.SinceSelected ? ActiveEvent : null;
+
+        // "Since previous" measures from the event before in time: the row above, or the row below when the newest event is first.
+        var previousOffset = NewestFirst ? 1 : -1;
         for (var i = 0; i < _pool.Count; i++)
         {
             var index = _viewport.First + i;
@@ -274,7 +343,11 @@ public sealed partial class LogGrid : UserControl
                 AutomationProperties.SetSizeOfSet(row, count);
                 row.Visibility = Visibility.Visible;
                 var e = _source[index];
-                row.Bind(e, _selection.IsSelected(index), focused && index == _selection.Active, Highlighter, IsBookmarked?.Invoke(e) == true, ShowSource);
+                var previous = index + previousOffset;
+                var reference = mode == TimeColumnMode.SincePrevious
+                    ? (previous >= 0 && previous < count ? _source[previous] : null)
+                    : selectedReference;
+                row.Bind(e, _selection.IsSelected(index), focused && index == _selection.Active, Highlighter, IsBookmarked?.Invoke(e) == true, reference, mode);
             }
             else
             {
@@ -285,7 +358,7 @@ public sealed partial class LogGrid : UserControl
 
         SyncScrollBar();
 
-        var atEnd = _viewport.First >= _viewport.MaxFirst;
+        var atEnd = NewestFirst ? _viewport.First == 0 : _viewport.First >= _viewport.MaxFirst;
         if (atEnd != IsAtEnd)
         {
             IsAtEnd = atEnd;
@@ -349,7 +422,7 @@ public sealed partial class LogGrid : UserControl
         }
 
         var point = e.GetCurrentPoint(RowsHost);
-        var index = _viewport.First + (int)(point.Position.Y / LogFormat.RowHeight);
+        var index = _viewport.First + (int)(point.Position.Y / _metrics.RowHeight);
         if (index < 0 || index >= _source.Count)
         {
             return;

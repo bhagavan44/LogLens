@@ -1,3 +1,4 @@
+using LogLens.Core.Collections;
 using LogLens.Core.Models;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
@@ -18,21 +19,47 @@ public sealed partial class LogRow : UserControl
     private static readonly Brush HighlightForeground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x14, 0x14, 0x14));
 
     private bool _selected;
+    private GridMetrics? _metrics;
 
     public LogRow()
     {
         InitializeComponent();
-        RowRoot.Height = LogFormat.RowHeight;
-        TimeColumn.Width = new GridLength(LogFormat.TimeColumnWidth);
-        LevelColumn.Width = new GridLength(LogFormat.LevelColumnWidth);
         foreach (var text in new[] { TimeText, MessageText, SourceText })
         {
             text.FontFamily = LogFormat.TextFont;
-            text.FontSize = LogFormat.FontSize;
+            text.FontSize = GridMetrics.FontSize;
         }
 
         // Inter is proportional: tabular numerals keep the timestamps lined up in a column.
         Typography.SetNumeralAlignment(TimeText, FontNumeralAlignment.Tabular);
+        Apply(GridMetrics.Default);
+    }
+
+    /// <summary>
+    /// Takes the row height, the column widths (a hidden column is 0 wide, FR-G1) and the number of message lines (FR-G6) from
+    /// <paramref name="metrics"/>. They must match the header in LogView.xaml.
+    /// </summary>
+    public void Apply(GridMetrics metrics)
+    {
+        if (_metrics == metrics)
+        {
+            return;
+        }
+
+        _metrics = metrics;
+        RowRoot.Height = metrics.RowHeight;
+        TimeColumn.Width = new GridLength(metrics.TimeColumnWidth);
+        LevelColumn.Width = new GridLength(metrics.LevelColumnWidth);
+        SourceColumn.Width = new GridLength(metrics.SourceColumnWidth);
+
+        // A zero-width cell can still show a glyph or two through the column spacing, so hidden cells are collapsed too.
+        TimeText.Visibility = metrics.TimeColumnWidth > 0 ? Visibility.Visible : Visibility.Collapsed;
+        LevelBadge.Visibility = metrics.LevelColumnWidth > 0 ? Visibility.Visible : Visibility.Collapsed;
+        SourceText.Visibility = metrics.SourceColumnWidth > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        // With wrapping on, a message may use several lines (the row is that much taller) and ends in an ellipsis after them.
+        MessageText.TextWrapping = metrics.MessageLines > 1 ? TextWrapping.Wrap : TextWrapping.NoWrap;
+        MessageText.MaxLines = metrics.MessageLines;
     }
 
     /// <summary>The grid this row belongs to (for UI Automation).</summary>
@@ -43,12 +70,20 @@ public sealed partial class LogRow : UserControl
 
     protected override AutomationPeer OnCreateAutomationPeer() => new LogRowAutomationPeer(this);
 
-    public void Bind(LogEvent e, bool selected, bool active, Func<string, IReadOnlyList<(int Start, int Length)>>? highlighter, bool bookmarked, bool showSource)
+    public void Bind(
+        LogEvent e,
+        bool selected,
+        bool active,
+        Func<string, IReadOnlyList<(int Start, int Length)>>? highlighter,
+        bool bookmarked,
+        LogEvent? timeReference,
+        TimeColumnMode timeMode)
     {
-        var time = LogText.Time(e);
+        var time = LogText.Time(e); // screen readers always get the timestamp
         var message = LogText.FirstLine(e.Message);
 
-        TimeText.Text = time;
+        // FR-G5: the cell can show the time since the row before it in time, or since the selected event.
+        TimeText.Text = LogText.TimeCell(e, timeReference, timeMode);
         LevelText.Text = LogText.LevelAbbreviation(e.Level);
         LevelBadge.Background = LogFormat.BadgeBackground(e.Level);
         LevelText.Foreground = LogFormat.BadgeForeground(e.Level);
@@ -57,13 +92,7 @@ public sealed partial class LogRow : UserControl
         ExceptionIcon.Visibility = e.Exception is null ? Visibility.Collapsed : Visibility.Visible;
         BookmarkMark.Visibility = bookmarked ? Visibility.Visible : Visibility.Collapsed;
 
-        var source = showSource && e.SourceFile is { } file ? Path.GetFileName(file) : null;
-        if ((SourceText.Visibility == Visibility.Visible) != showSource)
-        {
-            SourceColumn.Width = new GridLength(showSource ? LogFormat.SourceColumnWidth : 0);
-            SourceText.Visibility = showSource ? Visibility.Visible : Visibility.Collapsed;
-        }
-
+        var source = _metrics is { SourceColumnWidth: > 0 } && e.SourceFile is { } file ? Path.GetFileName(file) : null;
         SourceText.Text = source ?? string.Empty;
 
         _selected = selected;

@@ -10,18 +10,8 @@ namespace LogLens.App.Views;
 /// </summary>
 public static class LogFormat
 {
-    /// <summary>Height of every grid row: rows never differ in height, so the grid counts rows, not pixels.</summary>
-    public const double RowHeight = 24;
-
+    /// <summary>Font size of the detail pane text (the grid's own metrics are in <see cref="LogLens.Core.Collections.GridMetrics"/>).</summary>
     public const double FontSize = 12;
-
-    /// <summary>Fits <see cref="LogText.TimeFormat"/> at <see cref="FontSize"/> with tabular numerals.</summary>
-    public const double TimeColumnWidth = 160;
-
-    public const double LevelColumnWidth = 40;
-
-    /// <summary>The file name column of a merged view (FR-O4).</summary>
-    public const double SourceColumnWidth = 160;
 
     /// <summary>The Inter file shipped with the app, so the default font does not depend on what is installed.</summary>
     public static FontFamily TextFont { get; } = new("ms-appx:///Assets/Fonts/Inter.ttf#Inter, Segoe UI");

@@ -2,6 +2,8 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using LogLens.App.Services;
 using LogLens.App.Views;
+using LogLens.Core.Models;
+using LogLens.Core.Settings;
 using LogLens.Infrastructure.Instances;
 using LogLens.Infrastructure.Loading;
 using LogLens.ViewModels;
@@ -28,13 +30,18 @@ public sealed partial class MainWindow : Window
     private static readonly string[] OpenExtensions = [".log", ".txt", ".clef", ".json", "*"];
 
     private readonly Dictionary<LogViewModel, (TabViewItem Tab, LogView View)> _open = [];
+    private readonly SettingsService _settings;
     private LogViewModel? _observedLog;
     private bool _syncingTabs;
     private string _folderPatterns = FolderScanner.DefaultPatterns;
 
-    public MainWindow(MainViewModel viewModel)
+    // What the Time column shows (View ▸ Time column, FR-G5). Not saved: every start shows timestamps again.
+    private TimeColumnMode _timeMode = TimeColumnMode.Timestamp;
+
+    public MainWindow(MainViewModel viewModel, SettingsService settings)
     {
         ViewModel = viewModel;
+        _settings = settings;
         InitializeComponent();
 
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
@@ -59,8 +66,20 @@ public sealed partial class MainWindow : Window
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
         ViewModel.Tabs.CollectionChanged += OnTabsCollectionChanged;
         ViewModel.TabChanged += (_, log) => UpdateTabHeader(log);
+        _settings.Changed += OnSettingsChanged;
         SyncAll();
         SyncRecentFiles();
+    }
+
+    /// <summary>A view option changed (the row order, wrapping, the timeline, a column): every tab takes it.</summary>
+    private void OnSettingsChanged(object? sender, EventArgs e)
+    {
+        foreach (var (_, view) in _open.Values)
+        {
+            view.ApplySettings(_settings.Current);
+        }
+
+        SyncViewItems();
     }
 
     public MainViewModel ViewModel { get; }
@@ -131,7 +150,7 @@ public sealed partial class MainWindow : Window
         var hasLog = ViewModel.HasLog;
         foreach (var item in new[]
         {
-            CloseItem, FindItem, FindNextItem, FindPreviousItem, FindAllItem, FilterItem, ClearFiltersItem, GoToItem, NextProblemItem,
+            ExportItem, CloseItem, FindItem, FindNextItem, FindPreviousItem, FindAllItem, FilterItem, ClearFiltersItem, GoToItem, NextProblemItem,
             PreviousProblemItem, ToggleBookmarkItem, NextBookmarkItem, PreviousBookmarkItem,
         })
         {
@@ -145,6 +164,7 @@ public sealed partial class MainWindow : Window
         LoadingText.Text = ViewModel.LoadingText;
         SyncLiveItems();
         SyncBookmarkItems();
+        SyncViewItems();
 
         if (ViewModel.Notice is { } notice)
         {
@@ -189,7 +209,7 @@ public sealed partial class MainWindow : Window
 
         foreach (var log in ViewModel.Tabs.Where(log => !_open.ContainsKey(log)))
         {
-            _open[log] = (CreateTab(log), new LogView(log));
+            _open[log] = (CreateTab(log), new LogView(log, _settings) { TimeMode = _timeMode });
         }
 
         var wanted = ViewModel.Tabs.Select(log => (object)_open[log].Tab).ToList();
@@ -410,6 +430,72 @@ public sealed partial class MainWindow : Window
         else if (e.PropertyName is nameof(LogViewModel.HasBookmarks) or nameof(LogViewModel.BookmarksPanelVisible))
         {
             SyncBookmarkItems();
+        }
+        else if (e.PropertyName is nameof(LogViewModel.StatisticsVisible))
+        {
+            SyncViewItems();
+        }
+    }
+
+    /// <summary>Ticks the View menu items that show an option: the settings, the time column mode, and the statistics of the log in front.</summary>
+    private void SyncViewItems()
+    {
+        var settings = _settings.Current;
+        var log = ViewModel.CurrentLog;
+        TimelineItem.IsChecked = settings.ShowTimeline;
+        NewestFirstItem.IsChecked = settings.NewestFirst;
+        WrapItem.IsChecked = settings.WrapMessages;
+        StatisticsItem.IsEnabled = log is not null;
+        StatisticsItem.IsChecked = log is { StatisticsVisible: true };
+        TimeColumnMenu.IsEnabled = log is not null;
+        TimeTimestampItem.IsChecked = _timeMode == TimeColumnMode.Timestamp;
+        TimeSincePreviousItem.IsChecked = _timeMode == TimeColumnMode.SincePrevious;
+        TimeSinceSelectedItem.IsChecked = _timeMode == TimeColumnMode.SinceSelected;
+    }
+
+    private void OnTimelineClick(object sender, RoutedEventArgs e)
+    {
+        var on = TimelineItem.IsChecked;
+        _settings.Update(s => s with { ShowTimeline = on });
+    }
+
+    private void OnNewestFirstClick(object sender, RoutedEventArgs e)
+    {
+        var on = NewestFirstItem.IsChecked;
+        _settings.Update(s => s with { NewestFirst = on });
+    }
+
+    private void OnWrapClick(object sender, RoutedEventArgs e)
+    {
+        var on = WrapItem.IsChecked;
+        _settings.Update(s => s with { WrapMessages = on });
+    }
+
+    private void OnStatisticsClick(object sender, RoutedEventArgs e)
+    {
+        CurrentView?.ToggleStatistics();
+        SyncViewItems();
+    }
+
+    private void OnTimeModeClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string tag } && Enum.TryParse<TimeColumnMode>(tag, out var mode))
+        {
+            _timeMode = mode;
+            foreach (var (_, view) in _open.Values)
+            {
+                view.TimeMode = mode;
+            }
+
+            SyncViewItems();
+        }
+    }
+
+    private async void OnExport(object sender, RoutedEventArgs e)
+    {
+        if (CurrentView is { } view)
+        {
+            await view.ExportAsync(WinRT.Interop.WindowNative.GetWindowHandle(this));
         }
     }
 
