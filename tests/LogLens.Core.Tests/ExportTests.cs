@@ -104,6 +104,26 @@ public class ExportTests
     }
 
     [Fact]
+    public void Json_lines_carry_the_template_and_properties_of_structured_events()
+    {
+        const string clef = """{"@t":"2026-11-13T04:45:32Z","@mt":"Order {Id}","Id":42,"Tags":["a"],"@@odd":true,"EventNumber":"theirs"}""";
+        var document = new LogDocument("x.clef", LogFormats.Clef);
+        var parser = LogFormats.Clef.CreateParser("x.clef");
+        document.Text.Append(clef);
+        document.Apply(parser.Append(clef));
+        document.Apply(parser.Complete());
+
+        var json = JsonDocument.Parse(Export(ExportFormat.Json, document).Trim()).RootElement;
+
+        Assert.Equal("Order 42", json.GetProperty("@m").GetString());
+        Assert.Equal("Order {Id}", json.GetProperty("@mt").GetString());
+        Assert.Equal(42, json.GetProperty("Id").GetInt32());
+        Assert.Equal("a", json.GetProperty("Tags")[0].GetString());
+        Assert.True(json.GetProperty("@@odd").GetBoolean());
+        Assert.Equal(1, json.GetProperty("EventNumber").GetInt32()); // ours, not the property of the same name
+    }
+
+    [Fact]
     public void An_unparsed_line_is_marked_in_json_and_has_no_time_or_level()
     {
         var first = JsonDocument.Parse(Export(ExportFormat.Json).Split('\n', StringSplitOptions.RemoveEmptyEntries)[0]).RootElement;

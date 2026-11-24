@@ -183,6 +183,56 @@ public static class LogExporter
 
     private static readonly JsonWriterOptions JsonOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, Indented = false };
 
+    private static void WriteValue(Utf8JsonWriter json, LogValue value)
+    {
+        switch (value.Value)
+        {
+            case null:
+                json.WriteNullValue();
+                break;
+            case string s:
+                json.WriteStringValue(s);
+                break;
+            case bool b:
+                json.WriteBooleanValue(b);
+                break;
+            case long l:
+                json.WriteNumberValue(l);
+                break;
+            case decimal m:
+                json.WriteNumberValue(m);
+                break;
+            case double d when double.IsFinite(d):
+                json.WriteNumberValue(d);
+                break;
+            case double d:
+                json.WriteStringValue(d.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                break;
+            case IReadOnlyList<LogValue> list:
+                json.WriteStartArray();
+                foreach (var item in list)
+                {
+                    WriteValue(json, item);
+                }
+
+                json.WriteEndArray();
+                break;
+            case IReadOnlyDictionary<string, LogValue> map:
+                json.WriteStartObject();
+                foreach (var (key, item) in map)
+                {
+                    json.WritePropertyName(key);
+                    WriteValue(json, item);
+                }
+
+                json.WriteEndObject();
+                break;
+            default:
+                json.WriteStringValue(value.ToString());
+                break;
+        }
+    }
+
     private static void WriteJson(IEnumerable<LogEvent> events, LogDocument document, TextWriter w, CancellationToken token)
     {
         var buffer = new ArrayBufferWriter<byte>(512);
@@ -206,9 +256,29 @@ public static class LogExporter
             }
 
             json.WriteString("@m", e.Message);
+            if (e.MessageTemplate is { } template)
+            {
+                json.WriteString("@mt", template);
+            }
+
             if (e.Exception is { } exception)
             {
                 json.WriteString("@x", exception);
+            }
+
+            if (e.Properties is { } properties)
+            {
+                // CLEF style: properties at the top level, a leading @ doubled so it can't be read as a reserved field.
+                foreach (var (name, value) in properties)
+                {
+                    if (name is "SourceFile" or "EventNumber")
+                    {
+                        continue;
+                    }
+
+                    json.WritePropertyName(name.StartsWith('@') ? "@" + name : name);
+                    WriteValue(json, value);
+                }
             }
 
             var source = SourceName(e, document);
