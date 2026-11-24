@@ -9,24 +9,28 @@ namespace LogLens.Core.Formats.SerilogText;
 /// first line of an event. Lines that do not match are continuation lines of the previous event (FR-F2, FR-F3).
 /// </summary>
 /// <remarks>
-/// Supported tokens: <c>{Timestamp[:format]}</c>, <c>{Level[:u3|w3|t3|u1|w1|t1|u|w|t]}</c>, <c>{Message[:lj]}</c>,
-/// <c>{SourceContext}</c>, <c>{NewLine}</c> and <c>{Exception}</c>; <c>{{</c>/<c>}}</c> escape braces. Anything after
-/// <c>{NewLine}</c> describes the following (exception) lines and is not matched. Other tokens throw <see cref="FormatException"/>.
+/// Supported tokens: <c>{Timestamp[:format]}</c>, <c>{Level[:u3|w3|t3|u1|w1|t1|u|w|t]}</c>, <c>{Message[:lj]}</c>, <c>{NewLine}</c>,
+/// <c>{Exception}</c> and any property (<c>{SourceContext}</c>, <c>{ThreadId}</c>, <c>{RequestId}</c> …), whose value becomes a property of
+/// the event; <c>{{</c>/<c>}}</c> escape braces. Anything after <c>{NewLine}</c> describes the following (exception) lines and is not matched.
+/// <c>{Properties}</c> and malformed templates throw <see cref="FormatException"/>.
 /// </remarks>
 public sealed class OutputTemplate
 {
     /// <summary>Serilog's default file sink template.</summary>
     public const string DefaultText = "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}";
 
+    /// <summary>Most properties one template can name.</summary>
+    public const int MaxProperties = 64;
+
     private static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(2); // NFR-10: no catastrophic backtracking
 
-    private OutputTemplate(string text, Regex startOfEvent, string timestampFormat, bool startsWithDigit, bool hasSourceContext)
+    private OutputTemplate(string text, Regex startOfEvent, string timestampFormat, bool startsWithDigit, IReadOnlyList<string> propertyNames)
     {
         Text = text;
         StartOfEvent = startOfEvent;
         TimestampFormat = timestampFormat;
         StartsWithDigit = startsWithDigit;
-        HasSourceContext = hasSourceContext;
+        PropertyNames = propertyNames;
         ParseTimestamp = SerilogText.TimestampFormat.CreateParser(timestampFormat);
     }
 
@@ -34,7 +38,7 @@ public sealed class OutputTemplate
 
     public string Text { get; }
 
-    /// <summary>Matches the first line of an event. Named groups: <c>ts</c>, <c>lvl</c>, <c>msg</c> and optionally <c>ctx</c>.</summary>
+    /// <summary>Matches the first line of an event. Named groups: <c>ts</c>, <c>lvl</c>, <c>msg</c>, and <c>p0</c>, <c>p1</c> … for <see cref="PropertyNames"/>.</summary>
     public Regex StartOfEvent { get; }
 
     public string TimestampFormat { get; }
@@ -42,7 +46,10 @@ public sealed class OutputTemplate
     /// <summary>True when an event line must begin with a digit, which lets the parser reject most continuation lines without running the regex.</summary>
     public bool StartsWithDigit { get; }
 
-    public bool HasSourceContext { get; }
+    /// <summary>The properties the template writes on an event's first line, in order; group <c>p<em>i</em></c> captures the <em>i</em>-th.</summary>
+    public IReadOnlyList<string> PropertyNames { get; }
+
+    public bool HasSourceContext => PropertyNames.Contains(Models.LogEvent.SourceContextProperty);
 
     internal SerilogText.TimestampFormat.TimestampParser ParseTimestamp { get; }
 
@@ -56,7 +63,7 @@ public sealed class OutputTemplate
         string? timestampFormat = null;
         var hasLevel = false;
         var hasMessage = false;
-        var hasContext = false;
+        var properties = new List<string>();
         var startsWithDigit = false;
         var firstToken = true;
         var stop = false;
@@ -117,16 +124,32 @@ public sealed class OutputTemplate
                         hasMessage = true;
                         pattern.Append("(?<msg>.*)");
                         break;
-                    case "SourceContext":
-                        hasContext = true;
-                        pattern.Append("(?<ctx>[^\\s]+?)");
-                        break;
                     case "NewLine" or "Exception":
                         // Everything from here on lives on the following lines.
                         stop = true;
                         break;
+                    case "Properties":
+                        throw new FormatException("The {Properties} token isn't supported; name the properties instead, e.g. {RequestId}.");
                     default:
-                        throw new FormatException($"Output template token '{{{name}}}' isn't supported yet.");
+                        if (name.Length == 0 || !name.All(ch => char.IsAsciiLetterOrDigit(ch) || ch == '_'))
+                        {
+                            throw new FormatException($"'{{{inner}}}' isn't a valid output template token.");
+                        }
+
+                        if (properties.Count == MaxProperties)
+                        {
+                            throw new FormatException($"An output template can name at most {MaxProperties} properties.");
+                        }
+
+                        if (properties.Contains(name))
+                        {
+                            throw new FormatException($"{{{name}}} appears twice in the output template.");
+                        }
+
+                        // Text in double quotes (Serilog quotes string values), or a run without spaces (possibly empty).
+                        pattern.Append("(?<p").Append(properties.Count.ToString(CultureInfo.InvariantCulture)).Append(@">""(?:[^""\\]|\\.)*""|\S*?)");
+                        properties.Add(name);
+                        break;
                 }
 
                 firstToken = false;
@@ -170,7 +193,7 @@ public sealed class OutputTemplate
 
         pattern.Append('$');
         var regex = new Regex(pattern.ToString(), RegexOptions.CultureInvariant | RegexOptions.Compiled | RegexOptions.ExplicitCapture, MatchTimeout);
-        return new OutputTemplate(template, regex, timestampFormat, startsWithDigit, hasContext);
+        return new OutputTemplate(template, regex, timestampFormat, startsWithDigit, properties);
     }
 
     private static void SplitToken(string inner, out string name, out string? format)

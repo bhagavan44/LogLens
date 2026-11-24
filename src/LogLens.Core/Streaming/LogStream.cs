@@ -33,6 +33,7 @@ public abstract record StreamBatch;
 /// <param name="MergedFiles">
 /// For a merged view (FR-O4): the text holds these files one after another, each starting at its offset within <paramref name="Text"/>.
 /// </param>
+/// <param name="Format">The format the text is parsed with, once known (it is detected from the first lines, FR-F1); null while detecting.</param>
 public sealed record ChunkBatch(
     string Text,
     ParseDelta Delta,
@@ -41,7 +42,8 @@ public sealed record ChunkBatch(
     bool InitialLoadComplete,
     string FilePath,
     string EncodingName,
-    IReadOnlyList<FileSegment>? MergedFiles = null) : StreamBatch;
+    IReadOnlyList<FileSegment>? MergedFiles = null,
+    ILogFormat? Format = null) : StreamBatch;
 
 /// <summary>The file was truncated or replaced: everything listed so far is stale, and the file is read again from the start (FR-T3).</summary>
 public sealed record ResetBatch(string Reason) : StreamBatch;
@@ -58,7 +60,7 @@ public sealed record StatusBatch(StreamState State, string? Message = null) : St
 /// </summary>
 public interface ILogStream : IAsyncDisposable
 {
-    /// <summary>The format the events are parsed with.</summary>
+    /// <summary>The format the stream was opened with; <see cref="AutoDetectFormat"/> when it is detected (the batches then say which it is).</summary>
     ILogFormat Format { get; }
 
     /// <summary>Keep watching for new data once the existing content has been read. May change at any time.</summary>
@@ -87,13 +89,17 @@ public interface ILogStream : IAsyncDisposable
 public interface ILogStreamFactory
 {
     /// <summary>A stream over <paramref name="path"/>. Nothing is read until <see cref="ILogStream.ReadAsync"/> is enumerated.</summary>
-    ILogStream Open(string path);
+    /// <param name="path">The file.</param>
+    /// <param name="format">The format to read it with; null detects it from the first lines (FR-F1).</param>
+    ILogStream Open(string path, ILogFormat? format = null);
 
     /// <summary>
     /// A merged view of <paramref name="paths"/> (FR-O4): every file is read, then their events are delivered in time order in one batch. It is a
     /// snapshot and does not follow the files. A file that can't be read fails the whole stream, naming that file.
     /// </summary>
-    ILogStream OpenMerged(IReadOnlyList<string> paths);
+    /// <param name="paths">The files.</param>
+    /// <param name="format">The format to read every file with; null detects each file's format.</param>
+    ILogStream OpenMerged(IReadOnlyList<string> paths, ILogFormat? format = null);
 }
 
 /// <summary>A file of a merged view (FR-O4) could not be read: names the file, and wraps why.</summary>

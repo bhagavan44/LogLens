@@ -1,0 +1,13 @@
+{"@t":"2026-11-13T02:30:00.0120000Z","@mt":"Application starting up","SourceContext":"Shop.Program","MachineName":"WEB01"}
+{"@t":"2026-11-13T02:30:00.3480000Z","@mt":"Loaded configuration from {Path}","@l":"Debug","Path":"appsettings.json","SourceContext":"Shop.Program"}
+{"@t":"2026-11-13T02:30:01.1200000Z","@mt":"Now listening on: {Address}","Address":"http://localhost:5000","SourceContext":"Microsoft.Hosting.Lifetime"}
+{"@t":"2026-11-13T02:30:04.6340000Z","@mt":"HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms","@r":["810.4123"],"RequestMethod":"GET","RequestPath":"/api/orders/32131","StatusCode":200,"Elapsed":810.41234,"RequestId":"0HN8K2:00000001","SourceContext":"Serilog.AspNetCore.RequestLoggingMiddleware"}
+{"@t":"2026-11-13T02:30:04.7500000Z","@mt":"Order {OrderId} shipped to customer {CustomerId}","OrderId":65083,"CustomerId":1204,"RequestId":"0HN8K2:00000001","SourceContext":"Shop.Orders.OrderHandler"}
+{"@t":"2026-11-13T02:30:04.8880000Z","@mt":"Retry {Attempt}/{MaxAttempts} for payment gateway after timeout of {Timeout} ms","@l":"Warning","Attempt":2,"MaxAttempts":3,"Timeout":664,"SourceContext":"Shop.Payments.PaymentService"}
+{"@t":"2026-11-13T02:30:05.3010000Z","@mt":"Payment failed for order {OrderId}","@l":"Error","@x":"System.InvalidOperationException: Sequence contains no matching element\r\n   at System.Linq.ThrowHelper.ThrowNoMatchException()\r\n   at Shop.Payments.PaymentService.Charge(Order order) in C:\\src\\Shop\\Payments\\PaymentService.cs:line 87","OrderId":67204,"RequestId":"0HN8K2:00000002","SourceContext":"Shop.Payments.PaymentService","@tr":"4bf92f3577b34da6a3ce929d0e0e4736","@sp":"00f067aa0ba902b7"}
+{"@t":"2026-11-13T02:30:05.9590000Z","@mt":"Cache hit for key {Key}","@l":"Verbose","Key":"product:84528","SourceContext":"Shop.Caching.ProductCache"}
+{"@t":"2026-11-13T02:30:06.1770000Z","@mt":"Basket {@Basket} checked out","Basket":{"$type":"Basket","Id":"b-9917","Items":["SKU-1","SKU-7"],"Total":42.5},"SourceContext":"Shop.Checkout"}
+{"@t":"2026-11-13T02:30:06.2510000Z","@m":"Order 93346 shipped to customer 2468","@i":"a1b2c3d4","@l":"Debug","OrderId":93346,"CustomerId":2468,"SourceContext":"Shop.Orders.OrderHandler"}
+
+this line is not JSON and is shown as it is
+{"@t":"2026-11-13T02:30:07.0040000Z","@mt":"Unhandled exception in {Worker}","@l":"Fatal","@x":"System.OutOfMemoryException: Insufficient memory to continue the execution of the program.","Worker":"QueueWorker","@@weird":"kept","SourceContext":"Shop.Worker"}

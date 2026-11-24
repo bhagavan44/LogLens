@@ -1,3 +1,4 @@
+using LogLens.Core.Formats;
 using LogLens.Core.Settings;
 using LogLens.Infrastructure.State;
 
@@ -42,7 +43,8 @@ public sealed class JsonSettingsStoreTests : IDisposable
             NewestFirst = true,
             WrapMessages = true,
             ShowTimeline = true,
-            Columns = new ColumnLayout { ShowLevel = false, TimeWidth = 120, SourceWidth = 220 },
+            Columns = new ColumnLayout { ShowLevel = false, TimeWidth = 120, SourceWidth = 220, ShowContext = false, ContextWidth = 250 },
+            CustomTemplates = [new CustomTemplate("Shop", "{Timestamp:HH:mm:ss} {Level:u3} {SourceContext} {Message}")],
         });
 
         var loaded = new JsonSettingsStore(Paths).Load();
@@ -52,6 +54,9 @@ public sealed class JsonSettingsStoreTests : IDisposable
         Assert.False(loaded.Columns.ShowLevel);
         Assert.Equal(120, loaded.Columns.TimeWidth);
         Assert.Equal(220, loaded.Columns.SourceWidth);
+        Assert.False(loaded.Columns.ShowContext);
+        Assert.Equal(250, loaded.Columns.ContextWidth);
+        Assert.Equal(new CustomTemplate("Shop", "{Timestamp:HH:mm:ss} {Level:u3} {SourceContext} {Message}"), Assert.Single(loaded.CustomTemplates));
         Assert.False(File.Exists(Paths.SettingsFile + ".tmp"));
     }
 

@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <None Include="..\..\samples\serilog-text\*.txt" LinkBase="samples\serilog-text" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\samples\serilog-clef\*.clef" LinkBase="samples\serilog-clef" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\samples\serilog-json\*.json" LinkBase="samples\serilog-json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

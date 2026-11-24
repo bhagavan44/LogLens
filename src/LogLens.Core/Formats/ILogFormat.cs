@@ -16,7 +16,7 @@ public enum LogFields
 /// <summary>
 /// A log format (SPEC §2, §6.2): a named parser factory. Every format turns text into the common <see cref="LogEvent"/> model, so loading,
 /// the grid, filters and export never special-case a format. Adding a format means adding an implementation of this interface, its tests
-/// and a <c>samples/&lt;format&gt;/</c> folder, and registering it in <see cref="LogFormats"/>.
+/// and a <c>samples/&lt;format&gt;/</c> folder, and registering it in <see cref="LogFormats"/> (and so in every <see cref="FormatCatalog"/>).
 /// </summary>
 public interface ILogFormat
 {
@@ -34,6 +34,12 @@ public interface ILogFormat
     /// — the next file of a rolling log (FR-T3) — starts at character offset <paramref name="startOffset"/> and event id <paramref name="firstId"/>.
     /// </summary>
     ILogParser CreateParser(string? sourceFile, long startOffset = 0, int firstId = 0);
+
+    /// <summary>
+    /// True when <paramref name="line"/> (one line, without its newline) starts an event of this format. Format detection (FR-F1) counts the
+    /// lines each format recognises among a file's first lines.
+    /// </summary>
+    bool Recognises(string line);
 }
 
 /// <summary>

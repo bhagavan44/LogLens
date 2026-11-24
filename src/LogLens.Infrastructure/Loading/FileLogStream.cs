@@ -32,11 +32,20 @@ public sealed record StreamOptions
 }
 
 /// <summary>Opens <see cref="FileLogStream"/>s on local files and Windows shares.</summary>
-public sealed class FileLogStreamFactory(StreamOptions? options = null) : ILogStreamFactory
+/// <param name="options">How files are read; its <see cref="StreamOptions.Format"/> is used when no format is given and there is no catalog.</param>
+/// <param name="formats">
+/// The formats in force (built-in plus custom templates, which can change while the app runs); when given, a file opened without a format has
+/// it detected among them (FR-F1).
+/// </param>
+public sealed class FileLogStreamFactory(StreamOptions? options = null, Func<FormatCatalog>? formats = null) : ILogStreamFactory
 {
-    public ILogStream Open(string path) => new FileLogStream(path, options);
+    public ILogStream Open(string path, ILogFormat? format = null)
+        => new FileLogStream(path, (options ?? new StreamOptions()) with { Format = FormatFor(format) });
 
-    public ILogStream OpenMerged(IReadOnlyList<string> paths) => new MergedLogStream(paths, options?.Format);
+    public ILogStream OpenMerged(IReadOnlyList<string> paths, ILogFormat? format = null) => new MergedLogStream(paths, FormatFor(format));
+
+    private ILogFormat FormatFor(ILogFormat? format)
+        => format ?? (formats is not null ? new AutoDetectFormat(formats()) : options?.Format ?? LogFormats.Default);
 }
 
 /// <summary>
@@ -383,13 +392,15 @@ public sealed class FileLogStream : ILogStream
         private readonly StreamOptions _options;
         private readonly byte[] _buffer;
         private readonly string? _pattern;
+        private readonly ILogFormat _format;
         private Decoder? _decoder;
         private long _position;
         private int _nextChunk;
         private byte[] _headSignature = [];
 
-        public Reader(string path, StreamOptions options, ILogParser? parser, bool continuing = false)
+        public Reader(string path, StreamOptions options, ILogParser? parser, bool continuing = false, ILogFormat? format = null)
         {
+            _format = format ?? options.Format;
             Path = path;
             _options = options;
             _buffer = new byte[Math.Max(options.ChunkBytes, 4)];
@@ -402,6 +413,9 @@ public sealed class FileLogStream : ILogStream
         public string Path { get; }
 
         public ILogParser Parser { get; }
+
+        /// <summary>The format the text is parsed with; null while it is still being detected (FR-F1).</summary>
+        public ILogFormat? ParsedFormat => Parser is DetectingParser detecting ? detecting.Detected : _format;
 
         /// <summary>The existing content has been read once.</summary>
         public bool InitialDone { get; private set; }
@@ -480,7 +494,7 @@ public sealed class FileLogStream : ILogStream
                     InitialDone = true;
                 }
 
-                var batch = new ChunkBatch(text, delta, _position, Math.Max(length, _position), complete, Path, EncodingName);
+                var batch = new ChunkBatch(text, delta, _position, Math.Max(length, _position), complete, Path, EncodingName, Format: ParsedFormat);
                 return new StepResult(StepKind.Data, batch, more);
             }
         }
@@ -489,18 +503,23 @@ public sealed class FileLogStream : ILogStream
         public ChunkBatch MarkerBatch()
         {
             InitialDone = true;
-            return new ChunkBatch(string.Empty, new ParseDelta(Parser.CommittedId, []), _position, _position, true, Path, EncodingName);
+            return new ChunkBatch(string.Empty, new ParseDelta(Parser.CommittedId, []), _position, _position, true, Path, EncodingName, Format: ParsedFormat);
         }
 
         /// <summary>Makes everything held back final (the end of a finished file) and returns the closing delta.</summary>
         public ChunkBatch CloseBatch(bool initialLoadComplete)
         {
             InitialDone = true;
-            return new ChunkBatch(string.Empty, Parser.Complete(), _position, _position, initialLoadComplete, Path, EncodingName);
+            var delta = Parser.Complete();
+            return new ChunkBatch(string.Empty, delta, _position, _position, initialLoadComplete, Path, EncodingName, Format: ParsedFormat);
         }
 
         /// <summary>The events as they would be if the file ended now, an unterminated last line included.</summary>
-        public ChunkBatch PreviewBatch() => new(string.Empty, Parser.Preview(), _position, _position, false, Path, EncodingName);
+        public ChunkBatch PreviewBatch()
+        {
+            var delta = Parser.Preview();
+            return new(string.Empty, delta, _position, _position, false, Path, EncodingName, Format: ParsedFormat);
+        }
 
         public bool TryFindSuccessor(out string? nextPath)
         {
@@ -530,9 +549,15 @@ public sealed class FileLogStream : ILogStream
             }
         }
 
-        /// <summary>Starts reading <paramref name="nextPath"/> from its beginning, continuing the event ids and text offsets.</summary>
+        /// <summary>
+        /// Starts reading <paramref name="nextPath"/> from its beginning, continuing the event ids and text offsets. The next file of a rolling
+        /// log is written by the same app, so it is read with the format detected for this one.
+        /// </summary>
         public Reader SwitchTo(string nextPath)
-            => new(nextPath, _options, _options.Format.CreateParser(nextPath, Parser.EndOffset, Parser.CommittedId), continuing: true);
+        {
+            var format = ParsedFormat ?? _options.Format;
+            return new(nextPath, _options, format.CreateParser(nextPath, Parser.EndOffset, Parser.CommittedId), continuing: true, format);
+        }
 
         private void Initialise(FileStream stream)
         {
