@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using LogLens.Core.Formats;
 using LogLens.Core.Models;
 using LogLens.Core.State;
 using LogLens.Core.Streaming;
@@ -33,12 +34,19 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly RecentFilesService _recent;
     private readonly SessionService _session;
     private readonly BookmarkService _bookmarks;
+    private readonly Func<FormatCatalog> _formats;
     private readonly Dictionary<LogViewModel, string> _pending = [];
     private CancellationTokenSource? _loadCancellation;
     private bool _restoring;
 
-    public MainViewModel(ILogStreamFactory streams, RecentFilesService recent, SessionService session, BookmarkService bookmarks)
+    /// <param name="streams">Opens files.</param>
+    /// <param name="recent">The recent files list.</param>
+    /// <param name="session">The tabs reopened on the next start.</param>
+    /// <param name="bookmarks">Bookmarks of every file.</param>
+    /// <param name="formats">The formats in force (built-in plus custom templates); the built-in ones when null.</param>
+    public MainViewModel(ILogStreamFactory streams, RecentFilesService recent, SessionService session, BookmarkService bookmarks, Func<FormatCatalog>? formats = null)
     {
+        _formats = formats ?? (() => FormatCatalog.BuiltIn);
         _streams = streams ?? throw new ArgumentNullException(nameof(streams));
         _recent = recent ?? throw new ArgumentNullException(nameof(recent));
         _session = session ?? throw new ArgumentNullException(nameof(session));
@@ -81,6 +89,9 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Recently opened files, newest first (FR-O1).</summary>
     public IReadOnlyList<string> RecentFiles => _recent.Files;
+
+    /// <summary>The formats a log can be read with (View ▸ Format, FR-F1): the built-in ones and the custom templates.</summary>
+    public IReadOnlyList<ILogFormat> AvailableFormats => _formats().All;
 
     /// <summary>The name a tab shows for <paramref name="log"/>.</summary>
     public static string TabTitle(LogViewModel log)
@@ -181,9 +192,10 @@ public sealed partial class MainViewModel : ObservableObject
             for (var i = 0; i < session.Tabs.Count && !cancellation.IsCancellationRequested; i++)
             {
                 var tab = session.Tabs[i];
+                var format = _formats().Find(tab.Format); // a custom template deleted since is detected instead
                 var log = tab.MergedFiles is { } merged
-                    ? FindMergedTab(merged) ?? await OpenTabAsync(path: null, merged, follow: false, cancellation.Token)
-                    : FindTab(tab.Path!) ?? await OpenTabAsync(tab.Path, mergedFiles: null, tab.Follow, cancellation.Token);
+                    ? FindMergedTab(merged) ?? await OpenTabAsync(path: null, merged, follow: false, cancellation.Token, format)
+                    : FindTab(tab.Path!) ?? await OpenTabAsync(tab.Path, mergedFiles: null, tab.Follow, cancellation.Token, format);
                 if (i == session.Selected && log is not null)
                 {
                     selected = log;
@@ -204,10 +216,42 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Opens one tab: a file (<paramref name="path"/>) or a merged view (<paramref name="mergedFiles"/>). Completes with the new log once it shows,
-    /// or with null when it failed or was cancelled before that.
+    /// Reads <paramref name="log"/> again with <paramref name="format"/> (null: detect it), in the same place in the tab strip (View ▸ Format,
+    /// FR-F1). The new tab replaces the old one once it shows; tail stays as it was.
     /// </summary>
-    private Task<LogViewModel?> OpenTabAsync(string? path, IReadOnlyList<string>? mergedFiles, bool follow, CancellationToken token)
+    public async Task ReopenWithFormatAsync(LogViewModel log, ILogFormat? format)
+    {
+        ArgumentNullException.ThrowIfNull(log);
+        var index = Tabs.IndexOf(log);
+        if (index < 0 || format?.Id == log.ChosenFormat?.Id)
+        {
+            return;
+        }
+
+        Notice = null;
+        var document = log.Document;
+        var reopened = await OpenTabAsync(
+            document.IsMerged ? null : document.FilePath,
+            document.MergedFiles,
+            log.IsFollowing,
+            LoadCancellation().Token,
+            format);
+        if (reopened is null)
+        {
+            return;
+        }
+
+        CloseTab(log);
+        MoveTab(Tabs.IndexOf(reopened), Math.Min(index, Tabs.Count - 1));
+        CurrentLog = reopened;
+    }
+
+    /// <summary>
+    /// Opens one tab: a file (<paramref name="path"/>) or a merged view (<paramref name="mergedFiles"/>), read with <paramref name="format"/> or,
+    /// when null, with the format detected from each file's first lines. Completes with the new log once it shows, or with null when it failed
+    /// or was cancelled before that.
+    /// </summary>
+    private Task<LogViewModel?> OpenTabAsync(string? path, IReadOnlyList<string>? mergedFiles, bool follow, CancellationToken token, ILogFormat? format = null)
     {
         if (token.IsCancellationRequested)
         {
@@ -217,7 +261,7 @@ public sealed partial class MainViewModel : ObservableObject
         ILogStream stream;
         try
         {
-            stream = mergedFiles is null ? _streams.Open(path!) : _streams.OpenMerged(mergedFiles);
+            stream = mergedFiles is null ? _streams.Open(path!, format) : _streams.OpenMerged(mergedFiles, format);
         }
         catch (Exception ex) when (IsReadError(ex))
         {
@@ -225,7 +269,7 @@ public sealed partial class MainViewModel : ObservableObject
             return Task.FromResult<LogViewModel?>(null);
         }
 
-        var log = new LogViewModel(new LogDocument(path, stream.Format), _bookmarks) { IsFollowing = follow && mergedFiles is null };
+        var log = new LogViewModel(new LogDocument(path, stream.Format), _bookmarks) { IsFollowing = follow && mergedFiles is null, ChosenFormat = format };
         var shown = new TaskCompletionSource<LogViewModel?>(TaskCreationOptions.RunContinuationsAsynchronously);
         BeginLoading(log, mergedFiles is null
             ? $"Opening {Path.GetFileName(path)}…"
@@ -467,8 +511,8 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         var tabs = Tabs.Select(t => t.Document.MergedFiles is { } merged
-            ? new SessionTab { MergedFiles = merged }
-            : new SessionTab { Path = t.Document.FilePath, Follow = t.IsFollowing }).ToList();
+            ? new SessionTab { MergedFiles = merged, Format = t.ChosenFormat?.Id }
+            : new SessionTab { Path = t.Document.FilePath, Follow = t.IsFollowing, Format = t.ChosenFormat?.Id }).ToList();
         _session.Save(new SessionState { Tabs = tabs, Selected = CurrentLog is null ? 0 : Math.Max(0, Tabs.IndexOf(CurrentLog)) });
     }
 
@@ -490,7 +534,7 @@ public sealed partial class MainViewModel : ObservableObject
             return new Notice(
                 NoticeSeverity.Warning,
                 "0 events parsed — check the format",
-                $"No line of {document.FileName} matched {document.Format.DisplayName} (the default Serilog template). The lines are shown as they are.");
+                $"No line of {document.FileName} matched {document.Format.DisplayName}. The lines are shown as they are. Pick the format under View ▸ Format, or add the app's output template in Settings ▸ Formats.");
         }
 
         return null;
