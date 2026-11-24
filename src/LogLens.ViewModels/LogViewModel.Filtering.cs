@@ -282,7 +282,7 @@ public sealed partial class LogViewModel
             return false;
         }
 
-        SetTimeBoxes(TimeRange.Around(TimeRange.WallClock(e.Timestamp), radius));
+        SetTimeBoxes(TimeRange.Around(TimeRange.WallClock(e.Timestamp, Zone), radius));
         return true;
     }
 
@@ -321,7 +321,7 @@ public sealed partial class LogViewModel
 
         if (TimeLiteral.TryParse(text, reference, out var parsed) && parsed.HasDate)
         {
-            value = parsed.Instant is { } instant ? TimeRange.WallClock(instant) : parsed.Wall;
+            value = parsed.Instant is { } instant ? TimeRange.WallClock(instant, Zone) : parsed.Wall;
             return true;
         }
 
@@ -330,10 +330,10 @@ public sealed partial class LogViewModel
     }
 
     private DateTime? FirstTimestamp()
-        => Document.Events.FirstOrDefault(e => !e.IsUnparsed) is { } first ? TimeRange.WallClock(first.Timestamp) : null;
+        => Document.Events.FirstOrDefault(e => !e.IsUnparsed) is { } first ? TimeRange.WallClock(first.Timestamp, Zone) : null;
 
     private DateTime? LastTimestamp()
-        => Document.Events.LastOrDefault(e => !e.IsUnparsed) is { } last ? TimeRange.WallClock(last.Timestamp) : null;
+        => Document.Events.LastOrDefault(e => !e.IsUnparsed) is { } last ? TimeRange.WallClock(last.Timestamp, Zone) : null;
 
     private static string Short(DateTime? value) => value?.ToString("MM-dd HH:mm:ss", CultureInfo.InvariantCulture) ?? "…";
 
@@ -431,7 +431,7 @@ public sealed partial class LogViewModel
             QueryError = null;
             query = _lastGoodQuery = null;
         }
-        else if (QueryParser.TryParse(QueryText, out query, out var error))
+        else if (QueryParser.TryParse(QueryText, Zone, out query, out var error))
         {
             QueryError = null;
             _lastGoodQuery = query;
@@ -446,10 +446,12 @@ public sealed partial class LogViewModel
         {
             Levels = CurrentLevelMask(),
             Time = _timeRange,
+            Zone = Zone,
             Query = query,
             OnlyMatching = OnlyMatches ? CurrentMatcher : null,
             Pin = ActivePin,
             Exclude = [.. _hiddenGroups],
+            Hide = CompileHideRules(),
         };
     }
 

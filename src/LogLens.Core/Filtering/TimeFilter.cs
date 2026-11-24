@@ -1,12 +1,13 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using LogLens.Core.Models;
 
 namespace LogLens.Core.Filtering;
 
 /// <summary>An inclusive wall-clock time window; either end may be open (FR-S2).</summary>
 /// <remarks>
-/// Wall-clock times are what the Time column shows. Until the timestamp zone option arrives (FR-G5) that is the time as logged, i.e. the
-/// clock reading in the event's own offset (<see cref="WallClock"/>).
+/// Wall-clock times are what the Time column shows: the clock reading in the zone the user picked (FR-G5), by default the time as logged,
+/// i.e. the reading in the event's own offset (<see cref="WallClock(DateTimeOffset, TimestampZone)"/>).
 /// </remarks>
 public sealed record TimeRange(DateTime? From, DateTime? To)
 {
@@ -22,8 +23,13 @@ public sealed record TimeRange(DateTime? From, DateTime? To)
     /// <summary>The window of ± <paramref name="radius"/> around <paramref name="centre"/>.</summary>
     public static TimeRange Around(DateTime centre, TimeSpan radius) => new(centre - radius, centre + radius);
 
-    /// <summary>The wall-clock reading of <paramref name="timestamp"/> as the grid shows it.</summary>
-    public static DateTime WallClock(DateTimeOffset timestamp) => timestamp.DateTime;
+    /// <summary>The wall-clock reading of <paramref name="timestamp"/> as the grid shows it in <paramref name="zone"/>.</summary>
+    public static DateTime WallClock(DateTimeOffset timestamp, TimestampZone zone = TimestampZone.AsLogged) => zone switch
+    {
+        TimestampZone.Local => timestamp.ToLocalTime().DateTime,
+        TimestampZone.Utc => timestamp.UtcDateTime,
+        _ => timestamp.DateTime,
+    };
 }
 
 /// <summary>A timestamp typed by the user: a wall-clock reading, or (when it carries <c>Z</c> / an offset) an exact instant.</summary>

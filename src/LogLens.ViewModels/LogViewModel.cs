@@ -69,7 +69,7 @@ public sealed partial class LogViewModel : ObservableObject
     // ----- detail pane (FR-D1 … FR-D4) -----
 
     public string DetailHeader => SelectedEvent is { } e
-        ? $"{LogText.LevelName(e.Level)}  ·  {LogText.FullTime(e)}"
+        ? $"{LogText.LevelName(e.Level)}  ·  {TimeDisplay.FullTime(e)}"
         : "Select an event to see its details";
 
     /// <summary>FR-D1: the full message.</summary>
@@ -148,7 +148,7 @@ public sealed partial class LogViewModel : ObservableObject
                 continue;
             }
 
-            sb.Append(LogText.Time(e)).Append('\t').Append(LogText.LevelAbbreviation(e.Level)).Append('\t').Append(e.Message);
+            sb.Append(TimeDisplay.Time(e)).Append('\t').Append(LogText.LevelAbbreviation(e.Level)).Append('\t').Append(e.Message);
             if (e.Exception is not null)
             {
                 sb.Append("\r\n").Append(e.Exception);

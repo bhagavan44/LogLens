@@ -8,6 +8,7 @@ using LogLens.Core.Settings;
 using LogLens.ViewModels;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.ApplicationModel.DataTransfer;
@@ -27,8 +28,8 @@ public sealed partial class LogView : UserControl
     private const int MaxFindAllSeedLength = 200;
 
     private readonly SettingsService _settings;
+    private AppSettings _applied = new();
     private ColumnLayout _columns = new();
-    private bool _wrap;
     private GridMetrics _metrics = GridMetrics.Default;
     private double _gripStartWidth;
     private ExportFormat _lastExportFormat = ExportFormat.Csv;
@@ -41,13 +42,8 @@ public sealed partial class LogView : UserControl
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         InitializeComponent();
 
-        MessageBox.FontFamily = LogFormat.TextFont;
         ExceptionBox.FontFamily = LogFormat.CodeFont;
         RawBox.FontFamily = LogFormat.CodeFont;
-        foreach (var box in new[] { MessageBox, ExceptionBox, RawBox })
-        {
-            box.FontSize = LogFormat.FontSize;
-        }
 
         EventGrid.IsBookmarked = viewModel.IsBookmarked;
         EventGrid.Source = viewModel.Events;
@@ -62,6 +58,9 @@ public sealed partial class LogView : UserControl
     }
 
     public LogViewModel ViewModel { get; }
+
+    /// <summary>The query bar, where the first-run hint points (UX-7).</summary>
+    public FrameworkElement FilterTarget => QueryBox;
 
     public static Visibility ToVisibility(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
 
@@ -126,14 +125,29 @@ public sealed partial class LogView : UserControl
 
     // ------------------------------------------------------------------ view options (settings, FR-G1, FR-G3, FR-G6)
 
-    /// <summary>Takes the view options: the row order, wrapped messages, the timeline and the column layout.</summary>
+    /// <summary>
+    /// Takes the settings a tab shows: the row order, wrapped messages, the timeline, the column layout, the log font and row density (FR-P2),
+    /// how timestamps are shown (FR-G5, FR-P3) and the hide rules (FR-S6).
+    /// </summary>
     public void ApplySettings(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        _applied = settings;
         _columns = settings.Columns;
-        _wrap = settings.WrapMessages;
         ViewModel.TimelineVisible = settings.ShowTimeline;
         ViewModel.NewestFirst = settings.NewestFirst;
+        ViewModel.SetTimeDisplay(settings.ToTimeDisplay());
+        ViewModel.SetHideRules(settings.HideRules);
+
+        var font = LogFormat.TextFont(settings.FontFamily);
+        EventGrid.TextFont = font;
+        EventGrid.TimeDisplay = ViewModel.TimeDisplay;
+        MessageBox.FontFamily = font;
+        foreach (var box in new[] { MessageBox, ExceptionBox, RawBox })
+        {
+            box.FontSize = settings.FontSize;
+        }
+
         SyncOrder();
         ApplyLayout();
     }
@@ -172,7 +186,7 @@ public sealed partial class LogView : UserControl
     /// <summary>Sizes the header and the rows to the column layout and the wrap option; a hidden column is 0 wide.</summary>
     private void ApplyLayout()
     {
-        _metrics = GridMetrics.For(_columns, _wrap, ViewModel.IsMerged);
+        _metrics = GridMetrics.For(_columns, _applied.WrapMessages, ViewModel.IsMerged, _applied.FontSize, _applied.RowDensity, _applied.TimestampFormat);
         HeaderTimeColumn.Width = new GridLength(_metrics.TimeColumnWidth);
         HeaderLevelColumn.Width = new GridLength(_metrics.LevelColumnWidth);
         HeaderSourceColumn.Width = new GridLength(_metrics.SourceColumnWidth);
@@ -223,6 +237,95 @@ public sealed partial class LogView : UserControl
     {
         PreviewColumns(layout);
         _settings.Update(s => s with { Columns = _columns });
+    }
+
+    // ------------------------------------------------------------------ saved filters (FR-S7)
+
+    /// <summary>Fills the Saved menu: one item per saved filter (ticked when it is in force), then Save and Delete.</summary>
+    private void OnSavedFiltersMenuOpening(object? sender, object e)
+    {
+        var menu = SavedFiltersMenu.Items;
+        menu.Clear();
+        var saved = _settings.Current.SavedFilters;
+        foreach (var filter in saved)
+        {
+            var item = new ToggleMenuFlyoutItem { Text = filter.Name, IsChecked = ViewModel.Matches(filter) };
+            ToolTipService.SetToolTip(item, DescribeFilter(filter));
+            item.Click += (_, _) =>
+            {
+                ViewModel.ApplySavedFilter(filter);
+                EventGrid.Focus(FocusState.Programmatic);
+            };
+            menu.Add(item);
+        }
+
+        if (saved.Count == 0)
+        {
+            menu.Add(new MenuFlyoutItem { Text = "No saved filters yet", IsEnabled = false });
+        }
+
+        menu.Add(new MenuFlyoutSeparator());
+        var save = new MenuFlyoutItem { Text = "Save current filter…", Icon = new FontIcon { Glyph = "\uE74E" } };
+        save.Click += async (_, _) => await SaveCurrentFilterAsync();
+        menu.Add(save);
+
+        if (saved.Count > 0)
+        {
+            var delete = new MenuFlyoutSubItem { Text = "Delete", Icon = new FontIcon { Glyph = "\uE74D" } };
+            foreach (var filter in saved)
+            {
+                var item = new MenuFlyoutItem { Text = filter.Name };
+                item.Click += (_, _) => _settings.Update(s => s with { SavedFilters = [.. s.SavedFilters.Where(f => f.Name != filter.Name)] });
+                delete.Items.Add(item);
+            }
+
+            menu.Add(delete);
+        }
+    }
+
+    /// <summary>"Levels: Warning, Error · @m like '%payment%'": what a saved filter sets, for its tooltip.</summary>
+    private string DescribeFilter(SavedFilter filter)
+    {
+        var levels = ViewModel.LevelToggles.Where(t => Core.Filtering.LevelMask.Allows(filter.Levels, t.Level)).Select(t => t.Label).ToList();
+        var levelText = levels.Count == ViewModel.LevelToggles.Count ? "All levels" : levels.Count == 0 ? "No levels" : "Levels: " + string.Join(", ", levels);
+        return string.IsNullOrWhiteSpace(filter.Query) ? levelText : $"{levelText}\n{filter.Query}";
+    }
+
+    /// <summary>Asks for a name and saves the query and level buttons under it; a filter with that name is replaced.</summary>
+    private async Task SaveCurrentFilterAsync()
+    {
+        var name = new TextBox { Header = "Name", PlaceholderText = "e.g. Payment errors", MaxLength = 80 };
+        AutomationProperties.SetName(name, "Saved filter name");
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            RequestedTheme = ActualTheme,
+            Title = "Save filter",
+            Content = new StackPanel
+            {
+                Spacing = 8,
+                Children =
+                {
+                    new TextBlock { Text = "Saves the query and the level buttons as they are now. Pick it again from the Saved menu in any log.", TextWrapping = TextWrapping.Wrap },
+                    name,
+                },
+            },
+            PrimaryButtonText = "Save",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            IsPrimaryButtonEnabled = false,
+        };
+        name.TextChanged += (_, _) => dialog.IsPrimaryButtonEnabled = !string.IsNullOrWhiteSpace(name.Text);
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(name.Text))
+        {
+            var filter = ViewModel.CaptureFilter(name.Text);
+            _settings.Update(s => s with
+            {
+                SavedFilters = [.. s.SavedFilters.Where(f => !string.Equals(f.Name, filter.Name, StringComparison.OrdinalIgnoreCase)), filter],
+            });
+        }
+
+        EventGrid.Focus(FocusState.Programmatic);
     }
 
     // ------------------------------------------------------------------ timeline (FR-N2) and statistics (FR-X1, FR-X2)

@@ -340,7 +340,7 @@ public sealed partial class LogViewModel
                 return row >= 0 ? (row, null) : (-1, string.Create(CultureInfo.InvariantCulture, $"Event {n.Number:N0} is hidden by the current filters."));
 
             case GoToTarget.Time t:
-                var at = GoTo.IndexAtOrAfter(View.Chronological, t.Value);
+                var at = GoTo.IndexAtOrAfter(View.Chronological, t.Value, Zone);
                 return at >= 0 ? (View.RowOfPosition(at), null) : (-1, "No event with a timestamp is shown.");
 
             default:

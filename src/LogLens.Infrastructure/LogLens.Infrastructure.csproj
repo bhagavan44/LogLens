@@ -9,6 +9,12 @@
     <InternalsVisibleTo Include="LogLens.Infrastructure.Tests" />
   </ItemGroup>
 
+  <!-- The app's own diagnostics log (NFR-12, SPEC 6.1). -->
+  <ItemGroup>
+    <PackageReference Include="Serilog" Version="4.3.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\LogLens.Core\LogLens.Core.csproj" />
   </ItemGroup>

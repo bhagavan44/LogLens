@@ -25,7 +25,7 @@ public sealed class BookmarkItem : ObservableObject
 
     public Bookmark Bookmark { get; }
 
-    public string TimeText => LogText.Time(Event);
+    public string TimeText => _owner.TimeDisplay.Time(Event);
 
     public string LevelText => LogText.LevelAbbreviation(Event.Level);
 
@@ -124,6 +124,16 @@ public sealed partial class LogViewModel
     }
 
     internal void SaveBookmarkNote(BookmarkItem item, string note) => _bookmarkService.SetNote(item.Bookmark, note);
+
+    /// <summary>The timestamps are shown another way: the panel's lines are replaced so they show it too.</summary>
+    private void RefreshBookmarkItems()
+    {
+        for (var i = 0; i < Bookmarks.Count; i++)
+        {
+            var item = Bookmarks[i];
+            Bookmarks[i] = new BookmarkItem(this, item.Event, item.Bookmark with { Note = item.Note }); // the note may have been edited since
+        }
+    }
 
     private void OnBookmarkServiceChanged(object? sender, EventArgs e) => ResolveBookmarks(0);
 

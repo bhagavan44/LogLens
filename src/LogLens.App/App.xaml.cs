@@ -4,6 +4,7 @@ using LogLens.Core.Settings;
 using LogLens.Core.State;
 using LogLens.Core.Streaming;
 using LogLens.Infrastructure;
+using LogLens.Infrastructure.Diagnostics;
 using LogLens.Infrastructure.Loading;
 using LogLens.Infrastructure.State;
 using LogLens.ViewModels;
@@ -14,6 +15,7 @@ namespace LogLens.App;
 
 public partial class App : Application
 {
+    private static int _closingReported;
     private readonly CrashPolicy _crashPolicy = new();
     private MainWindow? _window;
 
@@ -21,13 +23,32 @@ public partial class App : Application
     {
         InitializeComponent();
         UnhandledException += OnUnhandledException;
+
+        // NFR-12: an exception that ends the process (a worker thread, or one the policy refuses to survive) still leaves a report.
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            if (e.ExceptionObject is Exception ex)
+            {
+                ReportCrash(ex, "unhandled exception", survived: false);
+            }
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            Log.Warning(e.Exception, "A background task failed and nobody waited for it");
+            e.SetObserved();
+        };
     }
+
+    /// <summary>LogLens's own diagnostics log (NFR-12); writes nothing until the paths are known.</summary>
+    internal static Serilog.ILogger Log { get; private set; } = Serilog.Core.Logger.None;
 
     /// <summary>Application-wide service provider; the composition root is <see cref="ConfigureServices"/>.</summary>
     public static IServiceProvider Services { get; private set; } = null!;
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        Log = DiagnosticsLog.Create(Program.Paths);
+        Log.Information("LogLens {Version} started; settings in {Folder}", AppInfo.Version, Program.Paths.RoamingRoot);
         Services = ConfigureServices();
 
         // Compile the template regexes and JIT the parser on a pool thread while the window starts, so the first file opens sooner (NFR-2).
@@ -35,6 +56,11 @@ public partial class App : Application
 
         var window = Services.GetRequiredService<MainWindow>();
         _window = window;
+        window.Closed += (_, _) =>
+        {
+            Log.Information("LogLens closed");
+            (Log as IDisposable)?.Dispose(); // flushes the file
+        };
         window.Activate();
 
         // Only the LogLens that owns the profile remembers the open log; a --new-window one leaves the session alone.
@@ -47,7 +73,7 @@ public partial class App : Application
         {
             window.Open(Program.CommandLine.Files);
         }
-        else if (primary)
+        else if (primary && Services.GetRequiredService<SettingsService>().Current.RestoreSession)
         {
             _ = viewModel.RestoreSessionAsync();
         }
@@ -63,6 +89,7 @@ public partial class App : Application
     {
         var services = new ServiceCollection();
         services.AddSingleton(Program.Paths);
+        services.AddSingleton(Log);
         services.AddSingleton<IStateStore>(sp => new JsonStateStore(sp.GetRequiredService<AppPaths>()));
         services.AddSingleton<ISettingsStore>(sp => new JsonSettingsStore(sp.GetRequiredService<AppPaths>()));
         services.AddSingleton(sp => new SettingsService(sp.GetRequiredService<ISettingsStore>()));
@@ -104,10 +131,39 @@ public partial class App : Application
 
         if (app._crashPolicy.Decide(exception) != CrashDecision.Continue)
         {
+            ReportCrash(exception, source, survived: false);
             return false;
         }
 
+        ReportCrash(exception, source, survived: true);
         window.ReportUnexpectedError(exception);
         return true;
+    }
+
+    /// <summary>Logs the exception and writes a crash report next to the diagnostics log (NFR-12). Never throws.</summary>
+    private static void ReportCrash(Exception exception, string source, bool survived)
+    {
+        if (!survived && Interlocked.Exchange(ref _closingReported, 1) == 1)
+        {
+            return; // already reported: the process is on its way out
+        }
+
+        try
+        {
+            Log.Error(exception, "Unhandled exception in {Source}; {Outcome}", source, survived ? "carried on" : "closing");
+            if (Program.Paths is { } paths)
+            {
+                CrashReports.Write(paths, exception, source, AppInfo.Version, survived);
+            }
+
+            if (!survived)
+            {
+                (Log as IDisposable)?.Dispose();
+            }
+        }
+        catch (Exception)
+        {
+            // reporting must never cause a second failure
+        }
     }
 }

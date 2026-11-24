@@ -73,7 +73,7 @@ public sealed partial class LogViewModel
             var text = string.Create(CultureInfo.InvariantCulture, $"{s.Total:N0} event{(s.Total == 1 ? string.Empty : "s")}");
             if (s.First is { } first && s.Last is { } last)
             {
-                text += $"  ·  {LogText.FullTime(first)} → {last.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture)}  ({FormatDuration(s.Duration)})";
+                text += $"  ·  {TimeDisplay.FullTime(first)} → {TimeDisplay.Convert(last).ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture)}  ({FormatDuration(s.Duration)})";
             }
 
             return text;
@@ -170,11 +170,12 @@ public sealed partial class LogViewModel
             {
                 var events = Document.Events;
                 var predicate = _timelinePredicate;
+                var zone = Zone;
                 TimelineData data;
                 BeginPass(); // the document must not grow under the worker
                 try
                 {
-                    data = await Task.Run(() => TimelineBuilder.Build(events, predicate, TimelineBuilder.DefaultBuckets, token), token);
+                    data = await Task.Run(() => TimelineBuilder.Build(events, predicate, TimelineBuilder.DefaultBuckets, token, zone), token);
                 }
                 finally
                 {

@@ -139,9 +139,9 @@ public static class GoTo
 
     /// <summary>
     /// Index of the first event at or after <paramref name="target"/> in <paramref name="rows"/> (the last timed event when the target is later
-    /// than all of them); -1 when no event has a timestamp. Unparsed lines are skipped.
+    /// than all of them); -1 when no event has a timestamp. Unparsed lines are skipped. A time without an offset is read in <paramref name="zone"/>.
     /// </summary>
-    public static int IndexAtOrAfter(IReadOnlyList<LogEvent> rows, TimeLiteralValue target)
+    public static int IndexAtOrAfter(IReadOnlyList<LogEvent> rows, TimeLiteralValue target, TimestampZone zone = TimestampZone.AsLogged)
     {
         ArgumentNullException.ThrowIfNull(rows);
         var lastTimed = -1;
@@ -154,7 +154,7 @@ public static class GoTo
             }
 
             lastTimed = i;
-            var reached = target.Instant is { } instant ? e.Timestamp >= instant : TimeRange.WallClock(e.Timestamp) >= target.Wall;
+            var reached = target.Instant is { } instant ? e.Timestamp >= instant : TimeRange.WallClock(e.Timestamp, zone) >= target.Wall;
             if (reached)
             {
                 return i;

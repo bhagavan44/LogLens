@@ -153,6 +153,35 @@
                         </DropDownButton.Flyout>
                     </DropDownButton>
 
+                    <!-- FR-S7: recall a named query and level choice; the menu is filled from the settings when it opens. -->
+                    <DropDownButton
+                        x:Name="SavedFiltersButton"
+                        FontSize="12"
+                        ToolTipService.ToolTip="Recall a saved filter, or save the current query and levels under a name"
+                        AutomationProperties.Name="Saved filters">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE734;" FontSize="12" />
+                            <TextBlock Text="Saved" />
+                        </StackPanel>
+                        <DropDownButton.Flyout>
+                            <MenuFlyout x:Name="SavedFiltersMenu" Placement="BottomEdgeAlignedLeft" Opening="OnSavedFiltersMenuOpening" />
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
+
+                    <!-- FR-S6: the hide rules from the settings apply to every log; one click shows the hidden events for a moment. -->
+                    <ToggleButton
+                        IsChecked="{x:Bind ViewModel.HideRulesOn, Mode=TwoWay}"
+                        Visibility="{x:Bind local:LogView.ToVisibility(ViewModel.HasHideRules), Mode=OneWay}"
+                        FontSize="12"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.HideRulesList, Mode=OneWay}"
+                        AutomationProperties.Name="{x:Bind ViewModel.HideRulesLabel, Mode=OneWay}"
+                        AutomationProperties.HelpText="Switch off to show the events the hide rules leave out. Edit the rules in Settings.">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xED1A;" FontSize="12" />
+                            <TextBlock Text="{x:Bind ViewModel.HideRulesLabel, Mode=OneWay}" />
+                        </StackPanel>
+                    </ToggleButton>
+
                     <Button
                         Visibility="{x:Bind local:LogView.ToVisibility(ViewModel.HasActivePin), Mode=OneWay}"
                         FontSize="12"
@@ -412,6 +441,8 @@
                 Style="{StaticResource AccentButtonStyle}"
                 CornerRadius="16"
                 Visibility="{x:Bind local:LogView.ToVisibility(ViewModel.HasPendingNewEvents), Mode=OneWay}"
+                AutomationProperties.Name="{x:Bind ViewModel.PendingNewEventsLabel, Mode=OneWay}"
+                AutomationProperties.HelpText="Jump to the latest event"
                 AutomationProperties.LiveSetting="Polite"
                 Click="OnJumpToLatestClick">
                 <StackPanel Orientation="Horizontal" Spacing="8">

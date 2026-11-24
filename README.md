@@ -40,9 +40,11 @@ different time zones interleave correctly. A merged view is a snapshot: it does 
 LogLens runs once per user: opening another file from Explorer or the command line while it runs
 opens the file in a new tab of the running window and brings it to the front. When you start LogLens
 without a file, it reopens the tabs that were open last time, merged views included (with tail on
-where it was on).
+where it was on); *Settings* can switch that off. To open logs straight from Explorer, add LogLens to
+the *Open with* menu in *Settings*.
 
-The **event list** shows one row per event: time (as logged), level and the first line of the message.
+The **event list** shows one row per event: time (as logged, or in your time zone or UTC, see
+[Settings](#settings)), level and the first line of the message.
 A ⚠ marks events that carry an exception. Lines before the first event that don't match the format
 are shown as *unparsed* rows instead of being dropped.
 
@@ -70,6 +72,14 @@ events are left (*120 of 5,000 events*), and *Clear filters* removes them all at
 - **Quick filters**: right-click an event to show only, or hide, events like it (the same message
   with different numbers, ids or quoted values), show only or hide its level, or show the events
   within ± 30 s of it. Active quick filters show as chips you can click to remove.
+- **Saved filters**: *Saved ▸ Save current filter…* keeps the query and the level buttons under a name;
+  pick it from the *Saved* menu of any log to apply it again (the tick shows the one in force), or delete
+  it there.
+- **Hide rules** leave noise out of every log, like a filter that is always on: health checks, a chatty
+  component, all *Verbose* events. Write them in *Settings* with the query syntax, for example
+  `@m startswith 'Health check'`. While rules apply, the filter bar shows *Hiding noise (2 rules)*;
+  click it to see the hidden events for a moment, and again to hide them. *Clear filters* leaves the
+  rules on.
 
 The **find bar** (Ctrl+F) highlights matches in the list and counts them (*3 of 120*). Options: match
 case, whole word, regular expression, and whether to search exception text too. *Only matches*
@@ -165,6 +175,36 @@ Other *View* options:
 |---|---|
 | Ctrl+S | Export the events |
 
+### Settings
+
+*File ▸ Settings…* (Ctrl+,) holds everything that is not a View option. Nothing changes until you press
+*Save*.
+
+- **Appearance**: light or dark theme, or follow Windows; the font and size of the log text (Inter comes
+  with LogLens; type the name of any installed font); comfortable or compact rows.
+- **Timestamps**: show times as logged, in this PC's time zone or in UTC, in any .NET date and time
+  format (for example `HH:mm:ss.fff`; a preview shows the result). The time filter, the query bar's
+  `@t`, the timeline and *Go to* read times in the zone shown, so what you type matches what you see.
+  The detail pane always adds the offset.
+- **Opening and following**: reopen last time's tabs at start-up (on by default), and start every file
+  you open with tail on.
+- **Hide rules**: add, name, switch off or delete them. A rule with a mistake is marked and has to be
+  fixed (or switched off) before saving.
+- **Open with**: *Register* adds LogLens to Explorer's *Open with* menu for `.log` (and, if you tick them,
+  `.clef`, `.txt` and `.json`) for your Windows user only: no administrator rights, and your default
+  programs stay as they are. *Remove* takes it out again. After moving or updating the exe, register
+  again.
+- **Settings file**: *Export…* saves your settings to a file and *Import…* loads one, to set up another
+  PC the same way. The column layout stays with each PC.
+
+*Help ▸ Keyboard shortcuts* (F1) lists every shortcut, and *Help ▸ Show the first-run hints again*
+brings back the two tips shown the first time a log is open.
+
+| Shortcut | Action |
+|---|---|
+| Ctrl+, | Settings |
+| F1 | Keyboard shortcuts |
+
 ### Command line
 
 ```
@@ -173,18 +213,26 @@ LogLens.exe [--data-dir <folder>] [--new-window] [<log file> ...]
 
 Each file opens in a tab of its own.
 
-- `--data-dir <folder>` keeps the settings (view options and column layout), recent files, bookmarks and
-  open tabs in `<folder>\LogLens` instead of `%APPDATA%\LogLens`, for a portable copy or for testing. Each
-  folder is a separate LogLens.
+- `--data-dir <folder>` keeps the settings, recent files, bookmarks, open tabs and diagnostics in
+  `<folder>\LogLens` instead of `%APPDATA%\LogLens` and `%LOCALAPPDATA%\LogLens`, for a portable copy
+  or for testing. Each folder is a separate LogLens.
 - `--new-window` starts a separate LogLens instead of handing the file to the running one; it does not
   change what is reopened next time.
 
 ## Privacy
 
 LogLens sends no telemetry and makes no network calls. Logs are only read, opened with sharing so
-the app writing them is never blocked. LogLens writes two files of its own in `%APPDATA%\LogLens`:
-`state.json` (the recent files, bookmarks and open tabs) and `settings.json` (the view options and column
-layout). Anything else is a file you chose to export.
+the app writing them is never blocked. LogLens writes these files of its own:
+
+- `%APPDATA%\LogLens\state.json`: the recent files, bookmarks and open tabs.
+- `%APPDATA%\LogLens\settings.json`: your settings, hide rules, saved filters and the column layout.
+- `%LOCALAPPDATA%\LogLens\logs\`: LogLens's own diagnostics log (what it did and what went wrong, never
+  the content of your logs; the last 14 days) and a report for each unexpected error (the last 10).
+  *Settings ▸ Open diagnostics folder* shows them; attach one to a bug report if you like. Nothing is
+  sent anywhere.
+
+*Open with* writes to the registry under `HKEY_CURRENT_USER\Software\Classes` only when you press
+*Register*, and *Remove* deletes it again. Anything else is a file you chose to export.
 
 ## Contributing
 

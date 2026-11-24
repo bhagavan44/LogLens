@@ -23,7 +23,9 @@
             </Grid.ColumnDefinitions>
 
             <TextBlock x:Name="TimeText" VerticalAlignment="Center" />
-            <Border x:Name="LevelBadge" Grid.Column="1" CornerRadius="3" Height="18" VerticalAlignment="Center">
+            <!-- In high contrast (UX-6) the fill is dropped and the theme brush below (a system colour there) draws the outline and the text. -->
+            <Border x:Name="LevelBadge" Grid.Column="1" CornerRadius="3" Height="18" VerticalAlignment="Center"
+                    BorderBrush="{ThemeResource TextFillColorPrimaryBrush}" BorderThickness="0">
                 <TextBlock x:Name="LevelText" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold" />
             </Border>
             <FontIcon x:Name="ExceptionIcon" Grid.Column="2" Glyph="&#xE7BA;" FontSize="12" VerticalAlignment="Center"

@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using LogLens.Core.Models;
+
 namespace LogLens.Core.Settings;
 
 /// <summary>
@@ -30,15 +33,91 @@ public sealed record ColumnLayout
         => width is { } w && double.IsFinite(w) ? Math.Clamp(Math.Round(w), MinWidth, MaxWidth) : null;
 }
 
+/// <summary>The app's colours (FR-P1).</summary>
+public enum ThemePreference
+{
+    /// <summary>Follow the Windows setting.</summary>
+    System = 0,
+    Light = 1,
+    Dark = 2,
+}
+
+/// <summary>How tall the rows of the log grid are (FR-P2).</summary>
+public enum RowDensity
+{
+    Comfortable = 0,
+    Compact = 1,
+}
+
+/// <summary>A noise filter (FR-S6): while <see cref="Enabled"/>, events matching <see cref="Query"/> (query bar syntax) are left out of every log.</summary>
+public sealed record HideRule
+{
+    public string Name { get; init; } = string.Empty;
+
+    public string Query { get; init; } = string.Empty;
+
+    public bool Enabled { get; init; } = true;
+
+    /// <summary>What a list shows for the rule: its name, or its query when it has none.</summary>
+    [JsonIgnore]
+    public string Label => string.IsNullOrWhiteSpace(Name) ? Query : Name;
+}
+
+/// <summary>A named filter (FR-S7): the query text and the levels that were switched on.</summary>
+public sealed record SavedFilter
+{
+    public string Name { get; init; } = string.Empty;
+
+    public string Query { get; init; } = string.Empty;
+
+    /// <summary>Bit mask of the levels shown (see <see cref="Filtering.LevelMask"/>); all levels when not set.</summary>
+    public int Levels { get; init; } = Filtering.LevelMask.All;
+}
+
 /// <summary>
-/// User settings (<c>settings.json</c>, SPEC §6.5). This round holds the view options of the grid; the settings dialog, hide rules, saved
-/// filters and the rest of FR-P1 … FR-P4 join it in v1.0.
+/// User settings (<c>settings.json</c>, SPEC §6.5): appearance (FR-P1, FR-P2), timestamps and start-up (FR-P3), hide rules and saved
+/// filters (FR-P4), and the view options of the grid. The column layout and <see cref="HintsSeen"/> belong to this PC and are left out of
+/// an exported settings file.
 /// </summary>
 public sealed record AppSettings
 {
     public const int CurrentVersion = 1;
 
+    /// <summary>The log font unless the user picks another. Inter ships inside the app (SIL OFL), so it is always there.</summary>
+    public const string DefaultFontFamily = "Inter";
+
+    public const double DefaultFontSize = 12;
+
+    /// <summary>Smallest and largest font sizes the settings accept.</summary>
+    public const double MinFontSize = 9;
+
+    public const double MaxFontSize = 20;
+
+    /// <summary>More hide rules or saved filters than this are dropped when the settings are read: they are a mistake, not a list.</summary>
+    public const int MaxListLength = 100;
+
     public int Version { get; init; } = CurrentVersion;
+
+    public ThemePreference Theme { get; init; } = ThemePreference.System;
+
+    /// <summary>Font of the log text in the grid and the message pane (FR-P2).</summary>
+    public string FontFamily { get; init; } = DefaultFontFamily;
+
+    public double FontSize { get; init; } = DefaultFontSize;
+
+    public RowDensity RowDensity { get; init; } = RowDensity.Comfortable;
+
+    /// <summary>The clock timestamps are shown in (FR-G5, FR-P3).</summary>
+    public TimestampZone TimestampZone { get; init; } = TimestampZone.AsLogged;
+
+    /// <summary>Format of the Time column: a .NET custom date and time format (FR-G5, FR-P3).</summary>
+    public string TimestampFormat { get; init; } = TimeDisplay.DefaultFormat;
+
+    /// <summary>Reopen the tabs that were open when LogLens last closed (FR-P3).</summary>
+    public bool RestoreSession { get; init; } = true;
+
+    /// <summary>Start following new events as soon as a file opens (FR-P3).</summary>
+    public bool TailByDefault { get; init; }
 
     /// <summary>List the newest event first in every tab (View ▸ Newest events first, FR-G3).</summary>
     public bool NewestFirst { get; init; }
@@ -49,8 +128,83 @@ public sealed record AppSettings
     /// <summary>Show the timeline above the grid (View ▸ Timeline, FR-N2).</summary>
     public bool ShowTimeline { get; init; }
 
-    /// <summary>Shown columns and their widths in the log grid (FR-G1).</summary>
+    /// <summary>Shown columns and their widths in the log grid (FR-G1). Belongs to this PC: not exported.</summary>
     public ColumnLayout Columns { get; init; } = new();
+
+    /// <summary>The first-run hints (UX-7) have been shown. Belongs to this PC: not exported, and an import keeps the current value.</summary>
+    public bool HintsSeen { get; init; }
+
+    /// <summary>Hide rules applied to every log (FR-S6).</summary>
+    public IReadOnlyList<HideRule> HideRules { get; init; } = [];
+
+    /// <summary>Named filters that can be recalled from the filter bar (FR-S7).</summary>
+    public IReadOnlyList<SavedFilter> SavedFilters { get; init; } = [];
+
+    /// <summary>How timestamps are shown with these settings.</summary>
+    public TimeDisplay ToTimeDisplay() => new(TimestampZone, TimestampFormat);
+
+    /// <summary>
+    /// The settings with every value a hand-edited or imported file could make unusable put right: sizes clamped, unknown enum values and
+    /// unusable formats back to their defaults, nulls replaced, empty rules and filters dropped. Always safe to call again.
+    /// </summary>
+    public AppSettings Normalised() => this with
+    {
+        Theme = Enum.IsDefined(Theme) ? Theme : ThemePreference.System,
+        FontFamily = string.IsNullOrWhiteSpace(FontFamily) ? DefaultFontFamily : FontFamily.Trim(),
+        FontSize = double.IsFinite(FontSize) ? Math.Clamp(Math.Round(FontSize, 1), MinFontSize, MaxFontSize) : DefaultFontSize,
+        RowDensity = Enum.IsDefined(RowDensity) ? RowDensity : RowDensity.Comfortable,
+        TimestampZone = Enum.IsDefined(TimestampZone) ? TimestampZone : TimestampZone.AsLogged,
+        TimestampFormat = TimeDisplay.IsUsableFormat(TimestampFormat) ? TimestampFormat : TimeDisplay.DefaultFormat,
+        Columns = (Columns ?? new ColumnLayout()).Normalised(),
+        HideRules = (HideRules ?? [])
+            .Where(r => r is not null && !string.IsNullOrWhiteSpace(r.Query))
+            .Select(r => r with { Name = r.Name?.Trim() ?? string.Empty, Query = r.Query.Trim() })
+            .Take(MaxListLength)
+            .ToList(),
+        SavedFilters = (SavedFilters ?? [])
+            .Where(f => f is not null && !string.IsNullOrWhiteSpace(f.Name))
+            .Select(f => f with { Name = f.Name.Trim(), Query = f.Query?.Trim() ?? string.Empty })
+            .DistinctBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxListLength)
+            .ToList(),
+    };
+
+    /// <summary>These settings with this PC's own part (column layout, first-run hints) taken from <paramref name="other"/>.</summary>
+    public AppSettings WithMachineStateOf(AppSettings other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        return this with { Columns = other.Columns, HintsSeen = other.HintsSeen };
+    }
+
+    /// <summary>These settings without this PC's own part, for an exported file.</summary>
+    public AppSettings Portable() => this with { Version = CurrentVersion, Columns = new ColumnLayout(), HintsSeen = false };
+
+    // A record compares lists by reference; settings compare them by value, so "nothing changed" is noticed after a load or an edit.
+    // Keep this in step with the properties above (SettingsModelTests changes each property in turn).
+    public bool Equals(AppSettings? other)
+        => other is not null
+           && Version == other.Version
+           && Theme == other.Theme
+           && FontFamily == other.FontFamily
+           && FontSize.Equals(other.FontSize)
+           && RowDensity == other.RowDensity
+           && TimestampZone == other.TimestampZone
+           && TimestampFormat == other.TimestampFormat
+           && RestoreSession == other.RestoreSession
+           && TailByDefault == other.TailByDefault
+           && NewestFirst == other.NewestFirst
+           && WrapMessages == other.WrapMessages
+           && ShowTimeline == other.ShowTimeline
+           && Equals(Columns, other.Columns)
+           && HintsSeen == other.HintsSeen
+           && SequenceEqual(HideRules, other.HideRules)
+           && SequenceEqual(SavedFilters, other.SavedFilters);
+
+    public override int GetHashCode()
+        => HashCode.Combine(Theme, FontFamily, FontSize, TimestampZone, TimestampFormat, NewestFirst, HideRules?.Count, SavedFilters?.Count);
+
+    private static bool SequenceEqual<T>(IReadOnlyList<T>? a, IReadOnlyList<T>? b)
+        => ReferenceEquals(a, b) || (a is not null && b is not null && a.SequenceEqual(b));
 }
 
 /// <summary>Reads and writes <see cref="AppSettings"/>. Implemented in Infrastructure (a JSON file).</summary>
@@ -82,8 +236,7 @@ public sealed class SettingsService
     public SettingsService(ISettingsStore store)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
-        var loaded = store.Load();
-        Current = loaded with { Columns = (loaded.Columns ?? new ColumnLayout()).Normalised() };
+        Current = (store.Load() ?? new AppSettings()).Normalised();
     }
 
     public AppSettings Current { get; private set; }
@@ -98,8 +251,7 @@ public sealed class SettingsService
     public void Update(Func<AppSettings, AppSettings> change)
     {
         ArgumentNullException.ThrowIfNull(change);
-        var next = change(Current);
-        next = next with { Columns = (next.Columns ?? new ColumnLayout()).Normalised() };
+        var next = (change(Current) ?? Current).Normalised();
         if (next == Current)
         {
             return;

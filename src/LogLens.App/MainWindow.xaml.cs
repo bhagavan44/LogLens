@@ -4,6 +4,7 @@ using LogLens.App.Services;
 using LogLens.App.Views;
 using LogLens.Core.Models;
 using LogLens.Core.Settings;
+using LogLens.Infrastructure;
 using LogLens.Infrastructure.Instances;
 using LogLens.Infrastructure.Loading;
 using LogLens.ViewModels;
@@ -31,6 +32,8 @@ public sealed partial class MainWindow : Window
 
     private readonly Dictionary<LogViewModel, (TabViewItem Tab, LogView View)> _open = [];
     private readonly SettingsService _settings;
+    private readonly AppPaths _paths;
+    private readonly Serilog.ILogger _log;
     private LogViewModel? _observedLog;
     private bool _syncingTabs;
     private string _folderPatterns = FolderScanner.DefaultPatterns;
@@ -38,10 +41,12 @@ public sealed partial class MainWindow : Window
     // What the Time column shows (View ▸ Time column, FR-G5). Not saved: every start shows timestamps again.
     private TimeColumnMode _timeMode = TimeColumnMode.Timestamp;
 
-    public MainWindow(MainViewModel viewModel, SettingsService settings)
+    public MainWindow(MainViewModel viewModel, SettingsService settings, AppPaths paths, Serilog.ILogger log)
     {
         ViewModel = viewModel;
         _settings = settings;
+        _paths = paths;
+        _log = log;
         InitializeComponent();
 
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
@@ -58,10 +63,12 @@ public sealed partial class MainWindow : Window
         }
         else
         {
-            Root.Background = (Brush)Application.Current.Resources["ApplicationPageBackgroundThemeBrush"];
+            SolidBackground.Visibility = Visibility.Visible;
         }
 
         AddTabSwitchAccelerators();
+        SettingsItem.KeyboardAccelerators.Add(new KeyboardAccelerator { Key = (VirtualKey)188 /* VK_OEM_COMMA */, Modifiers = VirtualKeyModifiers.Control });
+        ApplyWindowSettings(_settings.Current);
 
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
         ViewModel.Tabs.CollectionChanged += OnTabsCollectionChanged;
@@ -71,9 +78,10 @@ public sealed partial class MainWindow : Window
         SyncRecentFiles();
     }
 
-    /// <summary>A view option changed (the row order, wrapping, the timeline, a column): every tab takes it.</summary>
+    /// <summary>The settings changed (a view option, a column, the Settings dialog): the window and every tab take them.</summary>
     private void OnSettingsChanged(object? sender, EventArgs e)
     {
+        ApplyWindowSettings(_settings.Current);
         foreach (var (_, view) in _open.Values)
         {
             view.ApplySettings(_settings.Current);
@@ -134,6 +142,7 @@ public sealed partial class MainWindow : Window
             case nameof(MainViewModel.CurrentLog):
                 SyncSelectedTab();
                 ObserveLog(ViewModel.CurrentLog);
+                QueueFirstRunHints();
                 break;
             case nameof(MainViewModel.RecentFiles):
                 SyncRecentFiles();

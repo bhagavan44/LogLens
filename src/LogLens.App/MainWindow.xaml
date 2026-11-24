@@ -14,6 +14,9 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+        <!-- UX-7: shown where Mica is not supported (Windows 10). A theme resource, so it follows the theme the user picked (FR-P1). -->
+        <Border x:Name="SolidBackground" Grid.RowSpan="4" Visibility="Collapsed" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}" />
+
         <!--
             UX-7: the tab strip is the title bar (FR-O2). The TabView holds only the tabs' headers; the log in front is shown in LogHost below
             the menu. The footer is the part of the strip that drags the window (SetTitleBar); it is kept at least as wide as the caption
@@ -88,6 +91,11 @@
                     </MenuFlyoutItem.KeyboardAccelerators>
                 </MenuFlyoutItem>
                 <MenuFlyoutItem x:Name="CloseOthersItem" Text="Close other tabs" Click="OnCloseOthers" IsEnabled="False" />
+                <MenuFlyoutSeparator />
+                <!-- Ctrl+, has no named VirtualKey: the accelerator is added in code. -->
+                <MenuFlyoutItem x:Name="SettingsItem" Text="Settings…" Click="OnSettings" KeyboardAcceleratorTextOverride="Ctrl+,">
+                    <MenuFlyoutItem.Icon><SymbolIcon Symbol="Setting" /></MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
                 <MenuFlyoutSeparator />
                 <MenuFlyoutItem Text="Exit" Click="OnExit" />
             </MenuBarItem>
@@ -191,6 +199,14 @@
                 <MenuFlyoutItem x:Name="PreviousTabItem" Text="Previous tab" Click="OnPreviousTab" IsEnabled="False" KeyboardAcceleratorTextOverride="Ctrl+Shift+Tab" />
             </MenuBarItem>
             <MenuBarItem Title="Help">
+                <MenuFlyoutItem Text="Keyboard shortcuts" Click="OnShortcuts">
+                    <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE765;" /></MenuFlyoutItem.Icon>
+                    <MenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Key="F1" />
+                    </MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem Text="Show the first-run hints again" Click="OnShowHints" />
+                <MenuFlyoutSeparator />
                 <MenuFlyoutItem Text="About LogLens" Click="OnAbout" />
             </MenuBarItem>
         </MenuBar>
@@ -213,5 +229,21 @@
                 </StackPanel>
             </Grid>
         </Grid>
+
+        <!-- First-run hints (UX-7), shown one after the other the first time a log is open; see MainWindow.Hints.cs. -->
+        <TeachingTip
+            x:Name="FilterTip"
+            Title="Find what matters"
+            Subtitle="Type a query such as @l >= 'Warning' (Ctrl&#x2060;+&#x2060;L); ? lists the syntax. Right-click a row to show or hide events like it. Saved keeps a filter for later."
+            PreferredPlacement="Bottom"
+            ActionButtonContent="Next"
+            CloseButtonContent="Skip"
+            ActionButtonClick="OnFilterTipNext" />
+        <TeachingTip
+            x:Name="TabsTip"
+            Title="Several logs at once"
+            Subtitle="Open more files with + or by dropping them on the window. File ▸ Merge files into one view puts them on one timeline. F1 lists every shortcut."
+            PreferredPlacement="Bottom"
+            CloseButtonContent="Got it" />
     </Grid>
 </Window>
