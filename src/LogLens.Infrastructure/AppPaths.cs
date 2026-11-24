@@ -56,6 +56,9 @@ public sealed class AppPaths
     /// <summary>View options and the other settings.</summary>
     public string SettingsFile => Path.Combine(RoamingRoot, "settings.json");
 
+    /// <summary>The diagnostics log and crash reports (NFR-12).</summary>
+    public string LogDirectory => Path.Combine(LocalRoot, "logs");
+
     /// <summary>Identifies this profile for single instance: another <c>--data-dir</c> is another LogLens.</summary>
     public string InstanceKey => RoamingRoot;
 }
