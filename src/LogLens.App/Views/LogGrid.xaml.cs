@@ -60,6 +60,37 @@ public sealed partial class LogGrid : UserControl
         }
     }
 
+    /// <summary>The font of the log text (FR-P2).</summary>
+    public FontFamily TextFont
+    {
+        get;
+        set
+        {
+            if (!ReferenceEquals(field, value))
+            {
+                field = value;
+                foreach (var row in _pool)
+                {
+                    row.SetFont(value);
+                }
+            }
+        }
+    } = LogFormat.DefaultTextFont;
+
+    /// <summary>The zone and format of the timestamps (FR-G5, FR-P3).</summary>
+    public TimeDisplay TimeDisplay
+    {
+        get;
+        set
+        {
+            if (field != value)
+            {
+                field = value;
+                Render();
+            }
+        }
+    } = TimeDisplay.Default;
+
     /// <summary>The rows run from the newest event down (FR-G3): new events arrive at the top. Set before the source is replaced.</summary>
     public bool NewestFirst { get; set; }
 
@@ -303,6 +334,7 @@ public sealed partial class LogGrid : UserControl
         while (_pool.Count < needed)
         {
             var row = new LogRow { Owner = this };
+            row.SetFont(TextFont);
             _pool.Add(row);
             RowsHost.Children.Add(row);
         }
@@ -328,6 +360,7 @@ public sealed partial class LogGrid : UserControl
         var count = RowCount;
         var focused = FocusState != FocusState.Unfocused;
         var mode = TimeMode;
+        var display = TimeDisplay;
         var selectedReference = mode == TimeColumnMode.SinceSelected ? ActiveEvent : null;
 
         // "Since previous" measures from the event before in time: the row above, or the row below when the newest event is first.
@@ -347,7 +380,7 @@ public sealed partial class LogGrid : UserControl
                 var reference = mode == TimeColumnMode.SincePrevious
                     ? (previous >= 0 && previous < count ? _source[previous] : null)
                     : selectedReference;
-                row.Bind(e, _selection.IsSelected(index), focused && index == _selection.Active, Highlighter, IsBookmarked?.Invoke(e) == true, reference, mode);
+                row.Bind(e, _selection.IsSelected(index), focused && index == _selection.Active, Highlighter, IsBookmarked?.Invoke(e) == true, reference, mode, display);
             }
             else
             {

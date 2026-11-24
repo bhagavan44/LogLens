@@ -1,4 +1,5 @@
 using LogLens.Core.Models;
+using LogLens.Core.Settings;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
@@ -10,11 +11,17 @@ namespace LogLens.App.Views;
 /// </summary>
 public static class LogFormat
 {
-    /// <summary>Font size of the detail pane text (the grid's own metrics are in <see cref="LogLens.Core.Collections.GridMetrics"/>).</summary>
-    public const double FontSize = 12;
-
     /// <summary>The Inter file shipped with the app, so the default font does not depend on what is installed.</summary>
-    public static FontFamily TextFont { get; } = new("ms-appx:///Assets/Fonts/Inter.ttf#Inter, Segoe UI");
+    public static FontFamily DefaultTextFont { get; } = new("ms-appx:///Assets/Fonts/Inter.ttf#Inter, Segoe UI");
+
+    /// <summary>
+    /// The log font the user picked (FR-P2): Inter comes from the app itself, any other name from the fonts installed on this PC, with Segoe UI
+    /// standing in when it is not installed.
+    /// </summary>
+    public static FontFamily TextFont(string? family)
+        => string.IsNullOrWhiteSpace(family) || string.Equals(family.Trim(), AppSettings.DefaultFontFamily, StringComparison.OrdinalIgnoreCase)
+            ? DefaultTextFont
+            : new FontFamily($"{family.Trim()}, Segoe UI");
 
     /// <summary>Exception and Raw text rely on alignment, so they use a monospaced font.</summary>
     public static FontFamily CodeFont { get; } = new("Cascadia Mono, Consolas");
@@ -34,6 +41,27 @@ public static class LogFormat
         Badge(0x7B, 0x10, 0x43, dark: false),  // Fatal        (white on plum 10.9:1)
         (new SolidColorBrush(Colors.Transparent), new SolidColorBrush(Color.FromArgb(255, 0x80, 0x80, 0x80))), // Unparsed: no badge
     ];
+
+    private static readonly Windows.UI.ViewManagement.AccessibilitySettings Accessibility = new();
+
+    /// <summary>
+    /// Windows' high-contrast mode is on (UX-6): fixed badge colours would ignore the user's palette, so rows draw the badge as an outline in
+    /// the system text colour instead. Read on every use, so turning the mode on or off takes effect on the next redraw.
+    /// </summary>
+    public static bool IsHighContrast
+    {
+        get
+        {
+            try
+            {
+                return Accessibility.HighContrast;
+            }
+            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException)
+            {
+                return false;
+            }
+        }
+    }
 
     public static Brush BadgeBackground(LogLevel level) => Badges[(int)level].Background;
 

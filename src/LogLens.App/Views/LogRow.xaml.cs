@@ -20,19 +20,31 @@ public sealed partial class LogRow : UserControl
 
     private bool _selected;
     private GridMetrics? _metrics;
+    private FontFamily? _font;
 
     public LogRow()
     {
         InitializeComponent();
-        foreach (var text in new[] { TimeText, MessageText, SourceText })
-        {
-            text.FontFamily = LogFormat.TextFont;
-            text.FontSize = GridMetrics.FontSize;
-        }
 
         // Inter is proportional: tabular numerals keep the timestamps lined up in a column.
         Typography.SetNumeralAlignment(TimeText, FontNumeralAlignment.Tabular);
+        SetFont(LogFormat.DefaultTextFont);
         Apply(GridMetrics.Default);
+    }
+
+    /// <summary>The font of the log text (FR-P2).</summary>
+    public void SetFont(FontFamily font)
+    {
+        if (ReferenceEquals(_font, font))
+        {
+            return;
+        }
+
+        _font = font;
+        foreach (var text in new[] { TimeText, MessageText, SourceText })
+        {
+            text.FontFamily = font;
+        }
     }
 
     /// <summary>
@@ -48,6 +60,15 @@ public sealed partial class LogRow : UserControl
 
         _metrics = metrics;
         RowRoot.Height = metrics.RowHeight;
+        foreach (var text in new[] { TimeText, MessageText, SourceText })
+        {
+            text.FontSize = metrics.FontSize;
+        }
+
+        // The badge grows with the text but always fits a compact row.
+        LevelText.FontSize = Math.Max(8, metrics.FontSize - 1);
+        LevelBadge.Height = Math.Min(Math.Round(metrics.FontSize * 1.5), metrics.RowHeight - 2);
+        ExceptionIcon.FontSize = metrics.FontSize;
         TimeColumn.Width = new GridLength(metrics.TimeColumnWidth);
         LevelColumn.Width = new GridLength(metrics.LevelColumnWidth);
         SourceColumn.Width = new GridLength(metrics.SourceColumnWidth);
@@ -77,16 +98,28 @@ public sealed partial class LogRow : UserControl
         Func<string, IReadOnlyList<(int Start, int Length)>>? highlighter,
         bool bookmarked,
         LogEvent? timeReference,
-        TimeColumnMode timeMode)
+        TimeColumnMode timeMode,
+        TimeDisplay timeDisplay)
     {
-        var time = LogText.Time(e); // screen readers always get the timestamp
+        var time = timeDisplay.Time(e); // screen readers always get the timestamp
         var message = LogText.FirstLine(e.Message);
 
-        // FR-G5: the cell can show the time since the row before it in time, or since the selected event.
-        TimeText.Text = LogText.TimeCell(e, timeReference, timeMode);
+        // FR-G5: the cell shows the timestamp in the chosen zone and format, or the time since the row before it in time or the selected event.
+        TimeText.Text = timeDisplay.TimeCell(e, timeReference, timeMode);
         LevelText.Text = LogText.LevelAbbreviation(e.Level);
-        LevelBadge.Background = LogFormat.BadgeBackground(e.Level);
-        LevelText.Foreground = LogFormat.BadgeForeground(e.Level);
+        if (LogFormat.IsHighContrast)
+        {
+            LevelBadge.Background = null;
+            LevelBadge.BorderThickness = new Thickness(e.Level == LogLevel.Unparsed ? 0 : 1);
+            LevelText.ClearValue(TextBlock.ForegroundProperty); // the system text colour
+        }
+        else
+        {
+            LevelBadge.Background = LogFormat.BadgeBackground(e.Level);
+            LevelBadge.BorderThickness = default;
+            LevelText.Foreground = LogFormat.BadgeForeground(e.Level);
+        }
+
         MessageText.Text = message;
         ApplyHighlights(message, highlighter);
         ExceptionIcon.Visibility = e.Exception is null ? Visibility.Collapsed : Visibility.Visible;
