@@ -29,6 +29,10 @@ public static class QueryParser
     public const string FieldsHelp = "@l (level), @t (timestamp), @m (message), @x (exception)";
 
     public static bool TryParse(string? text, out CompiledQuery? query, out QueryError error)
+        => TryParse(text, TimestampZone.AsLogged, out query, out error);
+
+    /// <summary>Compiles <paramref name="text"/>; a timestamp without an offset compares with the wall clock in <paramref name="zone"/> (FR-G5).</summary>
+    public static bool TryParse(string? text, TimestampZone zone, out CompiledQuery? query, out QueryError error)
     {
         query = null;
         error = default;
@@ -37,7 +41,7 @@ public static class QueryParser
         try
         {
             var tokens = Lexer.Tokenize(text);
-            var parser = new Parser(tokens);
+            var parser = new Parser(tokens, zone);
             var predicate = parser.ParseAll();
             query = new CompiledQuery(text, predicate);
             return true;
@@ -191,7 +195,7 @@ public static class QueryParser
 
     private sealed record NullLiteral(Token Token) : Literal(Token);
 
-    private sealed class Parser(List<Token> tokens)
+    private sealed class Parser(List<Token> tokens, TimestampZone zone)
     {
         private int _p;
 
@@ -432,7 +436,7 @@ public static class QueryParser
                 return Ordered(kind, e => e.IsUnparsed ? null : e.Timestamp.UtcTicks, instant.UtcTicks, op);
             }
 
-            return Ordered(kind, e => e.IsUnparsed ? null : TimeRange.WallClock(e.Timestamp).Ticks, value.Wall.Ticks, op);
+            return Ordered(kind, e => e.IsUnparsed ? null : TimeRange.WallClock(e.Timestamp, zone).Ticks, value.Wall.Ticks, op);
         }
 
         private Func<LogEvent, bool> CompareText(Field field, string kind, Literal literal, Token op)

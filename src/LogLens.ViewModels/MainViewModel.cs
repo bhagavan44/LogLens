@@ -69,6 +69,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Whether the open logs are remembered for the next start (false for a second, independent window).</summary>
     public bool RemembersSession { get; set; } = true;
 
+    /// <summary>Files opened by the user start following new events at once (FR-P3); a restored session keeps each tab as it was.</summary>
+    public bool TailByDefault { get; set; }
+
     public bool HasLog => CurrentLog is not null;
 
     /// <summary>UX-2: the drop zone shows while nothing is open or opening.</summary>
@@ -125,7 +128,7 @@ public sealed partial class MainViewModel : ObservableObject
                 continue;
             }
 
-            await OpenTabAsync(path, mergedFiles: null, follow, cancellation.Token);
+            await OpenTabAsync(path, mergedFiles: null, follow || TailByDefault, cancellation.Token);
         }
 
         if (skipped > 0)

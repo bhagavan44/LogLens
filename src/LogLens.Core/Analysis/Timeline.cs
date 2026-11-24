@@ -71,13 +71,15 @@ public static class TimelineBuilder
 
     /// <summary>
     /// Counts the events accepted by <paramref name="include"/> (null = all) into <paramref name="buckets"/> equal slices of the time they
-    /// span. Unparsed lines have no timestamp and are skipped. Safe to call off the UI thread while nothing mutates the list.
+    /// span. Unparsed lines have no timestamp and are skipped. Times are wall-clock readings in <paramref name="zone"/>, as the grid shows them.
+    /// Safe to call off the UI thread while nothing mutates the list.
     /// </summary>
     public static TimelineData Build(
         IReadOnlyList<LogEvent> events,
         Func<LogEvent, bool>? include,
         int buckets = DefaultBuckets,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        TimestampZone zone = TimestampZone.AsLogged)
     {
         ArgumentNullException.ThrowIfNull(events);
         buckets = Math.Max(1, buckets);
@@ -102,7 +104,7 @@ public static class TimelineBuilder
                 continue;
             }
 
-            var wall = TimeRange.WallClock(e.Timestamp).Ticks;
+            var wall = TimeRange.WallClock(e.Timestamp, zone).Ticks;
             if (used == ticks.Length)
             {
                 Array.Resize(ref ticks, ticks.Length * 2);

@@ -12,6 +12,9 @@ public sealed record FilterSpec
 
     public TimeRange Time { get; init; } = TimeRange.Open;
 
+    /// <summary>The zone <see cref="Time"/> is read in: the one the grid shows (FR-G5).</summary>
+    public TimestampZone Zone { get; init; } = TimestampZone.AsLogged;
+
     public CompiledQuery? Query { get; init; }
 
     /// <summary>When set, only events matching the find-bar text are kept ("Only matches").</summary>
@@ -23,8 +26,12 @@ public sealed record FilterSpec
     /// <summary>Groups hidden from a row's menu ("Hide events like this one"): an event in any of them is left out.</summary>
     public IReadOnlyList<EventPin> Exclude { get; init; } = [];
 
+    /// <summary>The hide rules in force (FR-S6): an event matching any of them is left out.</summary>
+    public IReadOnlyList<CompiledQuery> Hide { get; init; } = [];
+
     /// <summary>True when at least one condition removes events.</summary>
-    public bool IsActive => Levels != LevelMask.All || !Time.IsOpen || Query is not null || OnlyMatching is not null || Pin is not null || Exclude.Count > 0;
+    public bool IsActive => Levels != LevelMask.All || !Time.IsOpen || Query is not null || OnlyMatching is not null || Pin is not null
+                            || Exclude.Count > 0 || Hide.Count > 0;
 
     /// <summary>The combined predicate, or null when nothing is filtered (the caller can then show every event without scanning).</summary>
     /// <remarks>The predicate is thread-safe, so a filter pass can run it on a worker thread.</remarks>
@@ -41,7 +48,8 @@ public sealed record FilterSpec
         var query = Query?.Predicate;
         var matcher = OnlyMatching;
         var pin = Pin?.Predicate;
-        var exclude = Exclude.Select(x => x.Predicate).ToArray();
+        var exclude = Exclude.Select(x => x.Predicate).Concat(Hide.Select(h => h.Predicate)).ToArray();
+        var zone = Zone;
 
         return e =>
         {
@@ -50,7 +58,7 @@ public sealed record FilterSpec
                 return false;
             }
 
-            if (time is not null && (e.IsUnparsed || !time.Contains(TimeRange.WallClock(e.Timestamp))))
+            if (time is not null && (e.IsUnparsed || !time.Contains(TimeRange.WallClock(e.Timestamp, zone))))
             {
                 return false;
             }

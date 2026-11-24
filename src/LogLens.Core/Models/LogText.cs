@@ -17,45 +17,28 @@ public enum TimeColumnMode
 
 /// <summary>
 /// How an event is rendered as text in the grid, the detail pane and the clipboard. Kept in Core so it is unit-tested; the WinUI layer only
-/// adds colours. Timestamps are shown as logged (zone and format options arrive with the settings round).
+/// adds colours. The timestamp helpers here show times as logged; a view with the user's zone and format uses <see cref="TimeDisplay"/>.
 /// </summary>
 public static class LogText
 {
-    /// <summary>Format of the Time column.</summary>
-    public const string TimeFormat = "yyyy-MM-dd HH:mm:ss.fff";
+    /// <summary>Format of the Time column by default.</summary>
+    public const string TimeFormat = TimeDisplay.DefaultFormat;
 
     /// <summary>Format of the full timestamp in the detail pane.</summary>
-    public const string FullTimeFormat = "yyyy-MM-dd HH:mm:ss.fff zzz";
+    public const string FullTimeFormat = TimeDisplay.FullFormat;
 
-    public static string Time(LogEvent e)
-    {
-        ArgumentNullException.ThrowIfNull(e);
-        return e.IsUnparsed ? "—" : e.Timestamp.ToString(TimeFormat, CultureInfo.InvariantCulture);
-    }
+    public static string Time(LogEvent e) => TimeDisplay.Default.Time(e);
 
-    public static string FullTime(LogEvent e)
-    {
-        ArgumentNullException.ThrowIfNull(e);
-        return e.IsUnparsed ? "no timestamp" : e.Timestamp.ToString(FullTimeFormat, CultureInfo.InvariantCulture);
-    }
+    public static string FullTime(LogEvent e) => TimeDisplay.Default.FullTime(e);
 
-    /// <summary>A timestamp as the Time column shows it.</summary>
-    public static string Time(DateTimeOffset timestamp) => timestamp.ToString(TimeFormat, CultureInfo.InvariantCulture);
+    /// <summary>A timestamp as the Time column shows it by default.</summary>
+    public static string Time(DateTimeOffset timestamp) => TimeDisplay.Default.Time(timestamp);
 
-    /// <summary>A timestamp with its offset, as the detail pane shows it.</summary>
-    public static string FullTime(DateTimeOffset timestamp) => timestamp.ToString(FullTimeFormat, CultureInfo.InvariantCulture);
+    /// <summary>A timestamp with its offset, as the detail pane shows it by default.</summary>
+    public static string FullTime(DateTimeOffset timestamp) => TimeDisplay.Default.FullTime(timestamp);
 
-    /// <summary>
-    /// The Time cell of <paramref name="e"/>: its timestamp, or, in a relative mode, the time elapsed since <paramref name="reference"/> (the
-    /// event before it, or the selected one). The reference itself and rows without a usable reference keep their timestamp, so the list stays anchored.
-    /// </summary>
-    public static string TimeCell(LogEvent e, LogEvent? reference, TimeColumnMode mode)
-    {
-        ArgumentNullException.ThrowIfNull(e);
-        return mode == TimeColumnMode.Timestamp || e.IsUnparsed || reference is null || reference.IsUnparsed || ReferenceEquals(e, reference)
-            ? Time(e)
-            : Delta(e.Timestamp - reference.Timestamp);
-    }
+    /// <inheritdoc cref="TimeDisplay.TimeCell"/>
+    public static string TimeCell(LogEvent e, LogEvent? reference, TimeColumnMode mode) => TimeDisplay.Default.TimeCell(e, reference, mode);
 
     /// <summary>A signed elapsed time, as short as it can be without hiding the milliseconds that matter: <c>+120 ms</c>, <c>+3.204 s</c>, <c>-2 m 05 s</c>.</summary>
     public static string Delta(TimeSpan delta)
