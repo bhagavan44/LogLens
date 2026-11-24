@@ -378,6 +378,7 @@ public sealed partial class LogViewModel : IDisposable
             OnPropertyChanged(nameof(IsMerged));
         }
 
+        UpdateFormat(chunk.Format);
         Document.Text.Append(chunk.Text);
         Document.EncodingName = chunk.EncodingName;
         Document.FileSizeBytes = chunk.FileLength;

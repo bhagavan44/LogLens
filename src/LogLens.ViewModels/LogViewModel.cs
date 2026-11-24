@@ -62,6 +62,7 @@ public sealed partial class LogViewModel : ObservableObject
     /// <summary>The active row of the grid; the detail pane follows it.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelection), nameof(DetailHeader), nameof(MessageText), nameof(HasException), nameof(ExceptionText), nameof(RawText), nameof(MetadataText))]
+    [NotifyPropertyChangedFor(nameof(HasMessageTemplate), nameof(MessageTemplateText), nameof(HasProperties), nameof(SelectedProperties), nameof(NoPropertiesText))]
     public partial LogEvent? SelectedEvent { get; set; }
 
     public bool HasSelection => SelectedEvent is not null;
