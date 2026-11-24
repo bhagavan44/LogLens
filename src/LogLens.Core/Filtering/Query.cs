@@ -18,15 +18,16 @@ public sealed class CompiledQuery(string text, Func<LogEvent, bool> predicate)
 }
 
 /// <summary>
-/// The query bar language (FR-S4). Fields: <c>@l</c> level, <c>@t</c> timestamp, <c>@m</c> message, <c>@x</c> exception.
-/// Operators: <c>= != &lt; &lt;= &gt; &gt;=</c>, <c>in [...]</c>, <c>like</c> (<c>%</c> and <c>_</c> wildcards), <c>contains</c>,
-/// <c>startswith</c>, <c>endswith</c>, <c>matches</c> (regex), <c>exists(field)</c>, combined with <c>and</c>, <c>or</c>, <c>not</c> and parentheses.
-/// Text comparisons ignore case. Structured properties arrive with the structured formats (SPEC §8); plain-text logs only have the four fields.
+/// The query bar language (FR-S4). Fields: <c>@l</c> level, <c>@t</c> timestamp, <c>@m</c> message, <c>@x</c> exception, <c>@mt</c>
+/// message template, and properties by name (<c>RequestId</c>, a dotted path into a structure such as <c>Http.Status</c>, or
+/// <c>@p['Any name']</c>). Operators: <c>= != &lt; &lt;= &gt; &gt;=</c>, <c>in [...]</c>, <c>like</c> (<c>%</c> and <c>_</c> wildcards),
+/// <c>contains</c>, <c>startswith</c>, <c>endswith</c>, <c>matches</c> (regex), <c>exists(field)</c>, combined with <c>and</c>, <c>or</c>,
+/// <c>not</c> and parentheses. Values: text in quotes, numbers, <c>true</c>, <c>false</c>, <c>null</c>. Text comparisons ignore case.
 /// </summary>
-/// <example><c>@l in ['Error','Fatal'] and @m like '%payment%' and @t &gt;= '2026-11-13 08:00'</c></example>
+/// <example><c>@l in ['Error','Fatal'] and @m like '%payment%' and @t &gt;= '2026-11-13 08:00' and Elapsed &gt; 500</c></example>
 public static class QueryParser
 {
-    public const string FieldsHelp = "@l (level), @t (timestamp), @m (message), @x (exception)";
+    public const string FieldsHelp = "@l (level), @t (timestamp), @m (message), @x (exception), @mt (message template) or a property name";
 
     public static bool TryParse(string? text, out CompiledQuery? query, out QueryError error)
         => TryParse(text, TimestampZone.AsLogged, out query, out error);
@@ -185,7 +186,15 @@ public static class QueryParser
 
     // ------------------------------------------------------------------ parser / compiler
 
-    private enum Field { Level, Time, Message, Exception }
+    private enum FieldKind { Level, Time, Message, Exception, Template, Property }
+
+    /// <summary>What a term compares: a built-in field, or a property (by name or dotted path).</summary>
+    private sealed record FieldRef(FieldKind Kind, Token Token, string? Name = null)
+    {
+        public bool IsText => Kind is FieldKind.Message or FieldKind.Exception or FieldKind.Template;
+
+        public string Display => Kind == FieldKind.Property ? Name! : Token.Text;
+    }
 
     private abstract record Literal(Token Token);
 
@@ -193,7 +202,14 @@ public static class QueryParser
 
     private sealed record NumberLiteral(Token Token, double Value) : Literal(Token);
 
+    private sealed record BoolLiteral(Token Token, bool Value) : Literal(Token);
+
     private sealed record NullLiteral(Token Token) : Literal(Token);
+
+    private static readonly HashSet<string> Keywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "and", "or", "not", "in", "like", "contains", "startswith", "endswith", "matches", "exists", "null", "true", "false",
+    };
 
     private sealed class Parser(List<Token> tokens, TimestampZone zone)
     {
@@ -273,23 +289,17 @@ public static class QueryParser
             if (IsWord("exists"))
             {
                 Next();
-                Expect(T.LParen, "Write exists(@x).");
+                Expect(T.LParen, "Write exists(@x) or exists(PropertyName).");
                 var field = ParseField();
                 Expect(T.RParen, "Missing ')' after the field.");
                 return Exists(field);
             }
 
-            if (t.Kind != T.Field)
+            if (t.Kind != T.Field && !(t.Kind == T.Word && !Keywords.Contains(t.Text)))
             {
-                if (t.Kind == T.Word)
-                {
-                    throw Error(t, $"Unknown field '{t.Text}'. Fields start with @: {FieldsHelp}. Structured properties need JSON logs.");
-                }
-
-                throw Error(t, "Expected a field (@l, @t, @m or @x), 'exists(...)', 'not' or '('.");
+                throw Error(t, "Expected a field (@l, @t, @m, @x, @mt or a property name), 'exists(...)', 'not' or '('.");
             }
 
-            var fieldToken = t;
             var f = ParseField();
             var negate = false;
             if (IsWord("not") && IsOperatorWord(tokens[_p + 1]))
@@ -304,22 +314,22 @@ public static class QueryParser
             {
                 Next();
                 var literal = ParseLiteral();
-                result = Compare(f, fieldToken, op, literal);
+                result = Compare(f, op, literal);
             }
             else if (IsWord("in"))
             {
                 Next();
-                result = In(f, fieldToken, ParseList());
+                result = In(f, ParseList());
             }
             else if (IsOperatorWord(op))
             {
                 Next();
                 var literal = ParseLiteral();
-                result = TextOperator(f, fieldToken, op, literal);
+                result = TextOperator(f, op, literal);
             }
             else
             {
-                throw Error(op.Kind == T.End ? fieldToken : op, $"After {fieldToken.Text} expected a comparison such as =, >=, in, like, contains, startswith, endswith or matches.");
+                throw Error(op.Kind == T.End ? f.Token : op, $"After {f.Display} expected a comparison such as =, >=, in, like, contains, startswith, endswith or matches.");
             }
 
             if (negate)
@@ -331,23 +341,45 @@ public static class QueryParser
             return result;
         }
 
-        private Field ParseField()
+        private FieldRef ParseField()
         {
             var t = Next();
+            if (t.Kind == T.Word && !Keywords.Contains(t.Text))
+            {
+                return new FieldRef(FieldKind.Property, t, t.Text);
+            }
+
             if (t.Kind != T.Field)
             {
                 throw Error(t, $"Expected a field: {FieldsHelp}.");
             }
 
-            return t.Text.ToLowerInvariant() switch
+            switch (t.Text.ToLowerInvariant())
             {
-                "@l" or "@level" => Field.Level,
-                "@t" or "@timestamp" => Field.Time,
-                "@m" or "@message" => Field.Message,
-                "@x" or "@exception" => Field.Exception,
-                "@mt" => throw Error(t, "@mt (message template) isn't available in plain-text logs; use @m for the rendered message."),
-                _ => throw Error(t, $"Unknown field '{t.Text}'. Available: {FieldsHelp}."),
-            };
+                case "@l" or "@level":
+                    return new FieldRef(FieldKind.Level, t);
+                case "@t" or "@timestamp":
+                    return new FieldRef(FieldKind.Time, t);
+                case "@m" or "@message":
+                    return new FieldRef(FieldKind.Message, t);
+                case "@x" or "@exception":
+                    return new FieldRef(FieldKind.Exception, t);
+                case "@mt" or "@messagetemplate":
+                    return new FieldRef(FieldKind.Template, t);
+                case "@p" or "@properties":
+                    // @p['Any name'] — a property whose name is not a plain word.
+                    Expect(T.LBracket, "Write @p['Property name'].");
+                    var name = Next();
+                    if (name.Kind != T.String || name.Str!.Length == 0)
+                    {
+                        throw Error(name, "Write the property name in quotes, e.g. @p['Request Id'].");
+                    }
+
+                    Expect(T.RBracket, "Missing ']' after the property name.");
+                    return new FieldRef(FieldKind.Property, name, name.Str);
+                default:
+                    throw Error(t, $"Unknown field '{t.Text}'. Available: {FieldsHelp}.");
+            }
         }
 
         private Literal ParseLiteral()
@@ -358,8 +390,10 @@ public static class QueryParser
                 T.String => new StringLiteral(t, t.Str!),
                 T.Number => new NumberLiteral(t, t.Num),
                 T.Word when t.Text.Equals("null", StringComparison.OrdinalIgnoreCase) => new NullLiteral(t),
+                T.Word when t.Text.Equals("true", StringComparison.OrdinalIgnoreCase) => new BoolLiteral(t, true),
+                T.Word when t.Text.Equals("false", StringComparison.OrdinalIgnoreCase) => new BoolLiteral(t, false),
                 T.Word => throw Error(t, $"'{t.Text}' isn't a value. Put text in quotes, e.g. '{t.Text}'."),
-                _ => throw Error(t, "Expected a value: text in quotes, a number, or null."),
+                _ => throw Error(t, "Expected a value: text in quotes, a number, true, false or null."),
             };
         }
 
@@ -388,26 +422,93 @@ public static class QueryParser
 
         // ---- semantics ----
 
-        private Func<LogEvent, bool> Exists(Field field) => field switch
+        private static Func<LogEvent, string?> TextOf(FieldRef field)
         {
-            Field.Exception => e => e.Exception is not null,
-            Field.Time => e => !e.IsUnparsed,
-            Field.Level => e => LevelMask.HasSeverity(e.Level),
-            _ => _ => true,
-        };
+            switch (field.Kind)
+            {
+                case FieldKind.Message:
+                    return e => e.Message;
+                case FieldKind.Exception:
+                    return e => e.Exception;
+                case FieldKind.Template:
+                    return e => e.MessageTemplate;
+                default:
+                    var get = PropertyOf(field.Name!);
+                    return e => get(e) is { IsNull: false } v ? v.ToString() : null;
+            }
+        }
 
-        private Func<LogEvent, bool> Compare(Field field, Token fieldToken, Token op, Literal literal)
+        /// <summary>
+        /// Reads a property: by its full name first, then — for a dotted name such as <c>Http.Status</c> — by walking into structures, so both a
+        /// property literally called "Http.Status" and the Status field of an Http structure are found.
+        /// </summary>
+        private static Func<LogEvent, LogValue?> PropertyOf(string name)
+        {
+            var path = name.Contains('.') ? name.Split('.') : null;
+            return e =>
+            {
+                if (e.Properties is not { } properties)
+                {
+                    return null;
+                }
+
+                if (properties.TryGetValue(name, out var value))
+                {
+                    return value;
+                }
+
+                if (path is null || !properties.TryGetValue(path[0], out value))
+                {
+                    return null;
+                }
+
+                for (var i = 1; i < path.Length; i++)
+                {
+                    if (value.AsStructure is not { } structure || !structure.TryGetValue(path[i], out value))
+                    {
+                        return null;
+                    }
+                }
+
+                return value;
+            };
+        }
+
+        private static Func<LogEvent, bool> Exists(FieldRef field)
+        {
+            switch (field.Kind)
+            {
+                case FieldKind.Exception:
+                    return e => e.Exception is not null;
+                case FieldKind.Template:
+                    return e => e.MessageTemplate is not null;
+                case FieldKind.Time:
+                    return e => !e.IsUnparsed;
+                case FieldKind.Level:
+                    return e => LevelMask.HasSeverity(e.Level);
+                case FieldKind.Property:
+                    var get = PropertyOf(field.Name!);
+                    return e => get(e) is { IsNull: false };
+                default:
+                    return _ => true;
+            }
+        }
+
+        private Func<LogEvent, bool> Compare(FieldRef field, Token op, Literal literal)
         {
             var kind = op.Text;
-            switch (field)
+            switch (field.Kind)
             {
-                case Field.Level:
+                case FieldKind.Level:
                     var level = LevelOf(literal);
                     // Unparsed lines and unrecognised levels have no severity, so they never match a level comparison.
                     return Ordered(kind, e => LevelMask.HasSeverity(e.Level) ? (long)e.Level : null, (long)level, op);
 
-                case Field.Time:
+                case FieldKind.Time:
                     return CompareTime(kind, literal, op);
+
+                case FieldKind.Property:
+                    return CompareProperty(field, kind, literal, op);
 
                 default:
                     return CompareText(field, kind, literal, op);
@@ -439,9 +540,9 @@ public static class QueryParser
             return Ordered(kind, e => e.IsUnparsed ? null : TimeRange.WallClock(e.Timestamp, zone).Ticks, value.Wall.Ticks, op);
         }
 
-        private Func<LogEvent, bool> CompareText(Field field, string kind, Literal literal, Token op)
+        private Func<LogEvent, bool> CompareText(FieldRef field, string kind, Literal literal, Token op)
         {
-            Func<LogEvent, string?> get = field == Field.Message ? e => e.Message : e => e.Exception;
+            var get = TextOf(field);
 
             if (literal is NullLiteral)
             {
@@ -455,7 +556,7 @@ public static class QueryParser
 
             if (literal is not StringLiteral s)
             {
-                throw Error(literal.Token, "Compare text with text in quotes, e.g. @m = 'started'.");
+                throw Error(literal.Token, $"Compare text with text in quotes, e.g. {field.Display} = 'started'.");
             }
 
             return kind switch
@@ -466,11 +567,59 @@ public static class QueryParser
             };
         }
 
-        private Func<LogEvent, bool> In(Field field, Token fieldToken, List<Literal> items)
+        /// <summary>
+        /// A property against a value. Numbers compare as numbers (text that reads as a number counts), text ignores case, true / false match
+        /// booleans. An event without the property — or with a null value — matches only <c>= null</c>; every other comparison is false for it.
+        /// </summary>
+        private Func<LogEvent, bool> CompareProperty(FieldRef field, string kind, Literal literal, Token op)
         {
-            switch (field)
+            var get = PropertyOf(field.Name!);
+            switch (literal)
             {
-                case Field.Level:
+                case NullLiteral:
+                    return kind switch
+                    {
+                        "=" => e => get(e) is null or { IsNull: true },
+                        "!=" => e => get(e) is { IsNull: false },
+                        _ => throw Error(op, "Only = and != can be used with null."),
+                    };
+
+                case BoolLiteral b:
+                    if (kind is not ("=" or "!="))
+                    {
+                        throw Error(op, "Only = and != can be used with true and false.");
+                    }
+
+                    var wanted = b.Value;
+                    return kind == "="
+                        ? e => AsBool(get(e)) == wanted
+                        : e => AsBool(get(e)) is { } v && v != wanted;
+
+                case NumberLiteral n:
+                    var target = n.Value;
+                    return OrderedDouble(kind, e => AsNumber(get(e)), target, op);
+
+                case StringLiteral s:
+                    var text = s.Value;
+                    var textIsNumber = double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var textNumber);
+                    return kind switch
+                    {
+                        "=" => e => ValueEquals(get(e), text),
+                        "!=" => e => get(e) is { IsNull: false } v && !ValueEquals(v, text),
+                        _ when textIsNumber => OrderedDouble(kind, e => AsNumber(get(e)), textNumber, op),
+                        _ => OrderedText(kind, e => get(e) is { IsNull: false, IsScalar: true } v ? v.ToString() : null, text, op),
+                    };
+
+                default:
+                    throw Error(literal.Token, "Expected a value.");
+            }
+        }
+
+        private Func<LogEvent, bool> In(FieldRef field, List<Literal> items)
+        {
+            switch (field.Kind)
+            {
+                case FieldKind.Level:
                     var mask = 0;
                     foreach (var item in items)
                     {
@@ -479,8 +628,23 @@ public static class QueryParser
 
                     return e => LevelMask.Allows(mask, e.Level);
 
-                case Field.Time:
-                    throw Error(fieldToken, "'in' can't be used with @t. Use >= and <= for a time range.");
+                case FieldKind.Time:
+                    throw Error(field.Token, "'in' can't be used with @t. Use >= and <= for a time range.");
+
+                case FieldKind.Property:
+                    var alternatives = items.Select(item => Compare(field, new Token(T.Op, "=", item.Token.Pos, 0), item)).ToArray();
+                    return e =>
+                    {
+                        foreach (var alternative in alternatives)
+                        {
+                            if (alternative(e))
+                            {
+                                return true;
+                            }
+                        }
+
+                        return false;
+                    };
 
                 default:
                     var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -494,16 +658,16 @@ public static class QueryParser
                         set.Add(s.Value);
                     }
 
-                    Func<LogEvent, string?> get = field == Field.Message ? e => e.Message : e => e.Exception;
+                    var get = TextOf(field);
                     return e => get(e) is { } v && set.Contains(v);
             }
         }
 
-        private Func<LogEvent, bool> TextOperator(Field field, Token fieldToken, Token op, Literal literal)
+        private Func<LogEvent, bool> TextOperator(FieldRef field, Token op, Literal literal)
         {
-            if (field is Field.Level or Field.Time)
+            if (field.Kind is FieldKind.Level or FieldKind.Time)
             {
-                throw Error(op, $"'{op.Text}' works on text fields (@m, @x), not {fieldToken.Text}.");
+                throw Error(op, $"'{op.Text}' works on text fields (@m, @x, @mt) and properties, not {field.Token.Text}.");
             }
 
             if (literal is not StringLiteral s)
@@ -511,7 +675,7 @@ public static class QueryParser
                 throw Error(literal.Token, $"'{op.Text}' needs text in quotes.");
             }
 
-            Func<LogEvent, string?> get = field == Field.Message ? e => e.Message : e => e.Exception;
+            var get = TextOf(field);
             var value = s.Value;
 
             switch (op.Text.ToLowerInvariant())
@@ -530,6 +694,43 @@ public static class QueryParser
                     return e => get(e) is { } v && IsMatch(regex, v);
             }
         }
+
+        private static bool ValueEquals(LogValue? value, string text)
+        {
+            if (value is null || value.IsNull)
+            {
+                return false;
+            }
+
+            if (value.IsNumber && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
+            {
+                return AsNumber(value) == number;
+            }
+
+            return string.Equals(value.ToString(), text, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static double? AsNumber(LogValue? value)
+        {
+            if (value is null)
+            {
+                return null;
+            }
+
+            if (value.TryGetNumber(out var number))
+            {
+                return number;
+            }
+
+            return value.Value is string s && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out number) ? number : null;
+        }
+
+        private static bool? AsBool(LogValue? value) => value?.Value switch
+        {
+            bool b => b,
+            string s when bool.TryParse(s, out var b) => b,
+            _ => null,
+        };
 
         private static bool IsMatch(Regex regex, string text)
         {
@@ -604,6 +805,30 @@ public static class QueryParser
             ">=" => e => key(e) is { } k && k >= target,
             _ => throw Error(op, $"Unknown operator '{kind}'."),
         };
+
+        private Func<LogEvent, bool> OrderedDouble(string kind, Func<LogEvent, double?> key, double target, Token op) => kind switch
+        {
+            "=" => e => key(e) == target,
+            "!=" => e => key(e) is { } k && k != target,
+            "<" => e => key(e) is { } k && k < target,
+            "<=" => e => key(e) is { } k && k <= target,
+            ">" => e => key(e) is { } k && k > target,
+            ">=" => e => key(e) is { } k && k >= target,
+            _ => throw Error(op, $"Unknown operator '{kind}'."),
+        };
+
+        private Func<LogEvent, bool> OrderedText(string kind, Func<LogEvent, string?> key, string target, Token op)
+        {
+            int? Cmp(LogEvent e) => key(e) is { } k ? string.Compare(k, target, StringComparison.OrdinalIgnoreCase) : null;
+            return kind switch
+            {
+                "<" => e => Cmp(e) < 0,
+                "<=" => e => Cmp(e) <= 0,
+                ">" => e => Cmp(e) > 0,
+                ">=" => e => Cmp(e) >= 0,
+                _ => throw Error(op, $"Unknown operator '{kind}'."),
+            };
+        }
 
         private bool IsWord(string word) => Peek.Kind == T.Word && Peek.Text.Equals(word, StringComparison.OrdinalIgnoreCase);
 
