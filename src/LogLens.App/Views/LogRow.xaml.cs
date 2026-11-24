@@ -41,7 +41,7 @@ public sealed partial class LogRow : UserControl
         }
 
         _font = font;
-        foreach (var text in new[] { TimeText, MessageText, SourceText })
+        foreach (var text in new[] { TimeText, ContextText, MessageText, SourceText })
         {
             text.FontFamily = font;
         }
@@ -60,7 +60,7 @@ public sealed partial class LogRow : UserControl
 
         _metrics = metrics;
         RowRoot.Height = metrics.RowHeight;
-        foreach (var text in new[] { TimeText, MessageText, SourceText })
+        foreach (var text in new[] { TimeText, ContextText, MessageText, SourceText })
         {
             text.FontSize = metrics.FontSize;
         }
@@ -72,11 +72,13 @@ public sealed partial class LogRow : UserControl
         TimeColumn.Width = new GridLength(metrics.TimeColumnWidth);
         LevelColumn.Width = new GridLength(metrics.LevelColumnWidth);
         SourceColumn.Width = new GridLength(metrics.SourceColumnWidth);
+        ContextColumn.Width = new GridLength(metrics.ContextColumnWidth);
 
         // A zero-width cell can still show a glyph or two through the column spacing, so hidden cells are collapsed too.
         TimeText.Visibility = metrics.TimeColumnWidth > 0 ? Visibility.Visible : Visibility.Collapsed;
         LevelBadge.Visibility = metrics.LevelColumnWidth > 0 ? Visibility.Visible : Visibility.Collapsed;
         SourceText.Visibility = metrics.SourceColumnWidth > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ContextText.Visibility = metrics.ContextColumnWidth > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         // With wrapping on, a message may use several lines (the row is that much taller) and ends in an ellipsis after them.
         MessageText.TextWrapping = metrics.MessageLines > 1 ? TextWrapping.Wrap : TextWrapping.NoWrap;
@@ -127,6 +129,8 @@ public sealed partial class LogRow : UserControl
 
         var source = _metrics is { SourceColumnWidth: > 0 } && e.SourceFile is { } file ? Path.GetFileName(file) : null;
         SourceText.Text = source ?? string.Empty;
+        var context = _metrics is { ContextColumnWidth: > 0 } ? e.SourceContext : null;
+        ContextText.Text = context ?? string.Empty;
 
         _selected = selected;
         SelectedBg.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
@@ -136,7 +140,7 @@ public sealed partial class LogRow : UserControl
         // Screen readers get the level spelled out (UX-5: never colour alone, and "ERR" reads poorly).
         AutomationProperties.SetName(
             this,
-            $"{(bookmarked ? "Bookmarked, " : string.Empty)}{LogText.LevelName(e.Level)}, {time}, {message}{(e.Exception is null ? string.Empty : ", has exception")}{(source is null ? string.Empty : ", from " + source)}");
+            $"{(bookmarked ? "Bookmarked, " : string.Empty)}{LogText.LevelName(e.Level)}, {time}, {message}{(e.Exception is null ? string.Empty : ", has exception")}{(context is null ? string.Empty : ", in " + context)}{(source is null ? string.Empty : ", from " + source)}");
     }
 
     private void ApplyHighlights(string text, Func<string, IReadOnlyList<(int Start, int Length)>>? highlighter)

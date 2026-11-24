@@ -440,7 +440,7 @@ public sealed partial class MainWindow : Window
         {
             SyncBookmarkItems();
         }
-        else if (e.PropertyName is nameof(LogViewModel.StatisticsVisible))
+        else if (e.PropertyName is nameof(LogViewModel.StatisticsVisible) or nameof(LogViewModel.Format))
         {
             SyncViewItems();
         }
@@ -460,6 +460,61 @@ public sealed partial class MainWindow : Window
         TimeTimestampItem.IsChecked = _timeMode == TimeColumnMode.Timestamp;
         TimeSincePreviousItem.IsChecked = _timeMode == TimeColumnMode.SincePrevious;
         TimeSinceSelectedItem.IsChecked = _timeMode == TimeColumnMode.SinceSelected;
+        SyncFormatMenu(log);
+    }
+
+    // ---------------------------------------------------------------- format (FR-F1)
+
+    /// <summary>
+    /// View ▸ Format: "Detect automatically" (naming what was detected) and every format of the catalog, the one the log in front is read with
+    /// ticked; choosing one reads the log again with it. Rebuilt whenever it could change: another tab, a format detected, custom templates edited.
+    /// </summary>
+    private void SyncFormatMenu(LogViewModel? log)
+    {
+        FormatMenu.IsEnabled = log is not null;
+        FormatMenu.Items.Clear();
+        if (log is null)
+        {
+            return;
+        }
+
+        var detect = new RadioMenuFlyoutItem
+        {
+            Text = log.ChosenFormat is null ? $"Detect automatically ({log.Format.DisplayName})" : "Detect automatically",
+            GroupName = "Format",
+            IsChecked = log.ChosenFormat is null,
+        };
+        detect.Click += (_, _) => ReopenWithFormat(log, null);
+        FormatMenu.Items.Add(detect);
+        FormatMenu.Items.Add(new MenuFlyoutSeparator());
+
+        foreach (var format in ViewModel.AvailableFormats)
+        {
+            var item = new RadioMenuFlyoutItem { Text = format.DisplayName, GroupName = "Format", IsChecked = log.ChosenFormat?.Id == format.Id };
+            item.Click += (_, _) => ReopenWithFormat(log, format);
+            FormatMenu.Items.Add(item);
+        }
+
+        FormatMenu.Items.Add(new MenuFlyoutSeparator());
+        var edit = new MenuFlyoutItem { Text = "Custom templates…" };
+        ToolTipService.SetToolTip(edit, "Add the output template of your app's text logs (Settings ▸ Formats)");
+        edit.Click += OnSettings;
+        FormatMenu.Items.Add(edit);
+    }
+
+    private async void ReopenWithFormat(LogViewModel log, Core.Formats.ILogFormat? format)
+    {
+        try
+        {
+            await ViewModel.ReopenWithFormatAsync(log, format);
+        }
+        catch (Exception ex)
+        {
+            _log.Error(ex, "Reading the log with another format failed");
+            ViewModel.ReportUnexpectedError(ex);
+        }
+
+        SyncViewItems();
     }
 
     private void OnTimelineClick(object sender, RoutedEventArgs e)

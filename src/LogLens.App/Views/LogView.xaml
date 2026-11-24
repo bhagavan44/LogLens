@@ -58,10 +58,10 @@
                         <Flyout>
                             <StackPanel MaxWidth="460" Spacing="6">
                                 <TextBlock Text="Filter syntax" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                <TextBlock TextWrapping="Wrap" Text="Fields: @l level · @t timestamp · @m message · @x exception." />
+                                <TextBlock TextWrapping="Wrap" Text="Fields: @l level · @t timestamp · @m message · @x exception · @mt message template · properties by name (RequestId, Http.Status, @p['Odd name']) in structured logs." />
                                 <TextBlock TextWrapping="Wrap" Text="Operators: = != &lt; &lt;= &gt; &gt;= · in [...] · like (% and _) · contains · startswith · endswith · matches (regex) · exists(@x) · and / or / not · ( )" />
                                 <TextBlock TextWrapping="Wrap" FontFamily="Cascadia Mono, Consolas" FontSize="12" IsTextSelectionEnabled="True"
-                                           Text="@l in ['Error','Fatal']&#x0A;@l >= 'Warning' and @m like '%payment%'&#x0A;@t >= '2026-11-13 08:00' and @t &lt; '2026-11-13 09:00'&#x0A;exists(@x) and not @x contains 'Timeout'" />
+                                           Text="@l in ['Error','Fatal']&#x0A;@l >= 'Warning' and @m like '%payment%'&#x0A;@t >= '2026-11-13 08:00' and @t &lt; '2026-11-13 09:00'&#x0A;exists(@x) and not @x contains 'Timeout'&#x0A;Elapsed &gt; 500 and SourceContext like 'Shop.%'" />
                                 <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                            Text="Text comparisons ignore case. Put text in quotes. Times are compared as shown in the grid." />
                             </StackPanel>
@@ -340,6 +340,7 @@
                     <MenuFlyout Opening="OnColumnMenuOpening">
                         <ToggleMenuFlyoutItem x:Name="ColumnTimeItem" Text="Time" Click="OnColumnToggleClick" />
                         <ToggleMenuFlyoutItem x:Name="ColumnLevelItem" Text="Level" Click="OnColumnToggleClick" />
+                        <ToggleMenuFlyoutItem x:Name="ColumnContextItem" Text="Context (structured logs)" Click="OnColumnToggleClick" />
                         <ToggleMenuFlyoutItem x:Name="ColumnSourceItem" Text="Source (merged views)" Click="OnColumnToggleClick" />
                         <MenuFlyoutSeparator />
                         <MenuFlyoutItem Text="Reset column widths" Click="OnColumnResetClick" />
@@ -349,13 +350,15 @@
                     <ColumnDefinition x:Name="HeaderTimeColumn" />
                     <ColumnDefinition x:Name="HeaderLevelColumn" />
                     <ColumnDefinition Width="16" />
+                    <ColumnDefinition x:Name="HeaderContextColumn" Width="0" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition x:Name="HeaderSourceColumn" Width="0" />
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="TimeHeaderText" Text="Time" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                 <TextBlock x:Name="LevelHeaderText" Grid.Column="1" Text="Level" FontWeight="SemiBold" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="3" Text="Message" FontWeight="SemiBold" VerticalAlignment="Center" />
-                <TextBlock x:Name="SourceHeaderText" Grid.Column="4" Text="Source" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="ContextHeaderText" Grid.Column="3" Text="Context" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="4" Text="Message" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock x:Name="SourceHeaderText" Grid.Column="5" Text="Source" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
 
                 <!-- Draggable column edges; the negative margin puts each grip over the gap next to its column. -->
                 <local:ColumnGrip
@@ -377,8 +380,27 @@
                     </Grid>
                 </local:ColumnGrip>
                 <local:ColumnGrip
+                    x:Name="ContextGrip"
+                    Grid.Column="3"
+                    Width="9"
+                    Margin="0,0,-8,0"
+                    HorizontalAlignment="Right"
+                    Direction="1"
+                    DragStarted="OnGripDragStarted"
+                    DragDelta="OnGripDragDelta"
+                    DragCompleted="OnGripDragCompleted"
+                    Nudged="OnGripNudged"
+                    ResetRequested="OnGripReset"
+                    AutomationProperties.Name="Width of the Context column"
+                    AutomationProperties.HelpText="Left and right arrows resize the column; Home resets it."
+                    ToolTipService.ToolTip="Drag to resize; double-click to reset">
+                    <Grid Background="Transparent">
+                        <Border Width="1" HorizontalAlignment="Center" Background="{ThemeResource ControlStrongStrokeColorDefaultBrush}" />
+                    </Grid>
+                </local:ColumnGrip>
+                <local:ColumnGrip
                     x:Name="SourceGrip"
-                    Grid.Column="4"
+                    Grid.Column="5"
                     Width="9"
                     Margin="-8,0,0,0"
                     HorizontalAlignment="Left"
@@ -452,7 +474,7 @@
             </Button>
         </Grid>
 
-        <!-- ===== Detail pane (FR-D1 … FR-D4) ===== -->
+        <!-- ===== Detail pane (FR-D1 … FR-D5) ===== -->
         <Grid
             Grid.Row="3"
             Grid.Column="1"
@@ -490,6 +512,8 @@
                 <SelectorBar x:Name="DetailTabs" SelectionChanged="OnDetailTabChanged" AutomationProperties.Name="Detail view">
                     <SelectorBarItem x:Name="MessageTab" Text="Message" IsSelected="True" />
                     <SelectorBarItem x:Name="ExceptionTab" Text="Exception" />
+                    <SelectorBarItem x:Name="PropertiesTab" Text="Properties"
+                                     Visibility="{x:Bind local:LogView.ToVisibility(ViewModel.HasStructuredFields), Mode=OneWay}" />
                     <SelectorBarItem x:Name="RawTab" Text="Raw" />
                     <SelectorBarItem x:Name="StatisticsTab" Text="Statistics" />
                 </SelectorBar>
@@ -535,6 +559,93 @@
                     AutomationProperties.Name="Raw event text"
                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+
+                <!-- ===== Message template and properties of structured events (FR-D5) ===== -->
+                <Grid x:Name="PropertiesPanel" Visibility="Collapsed" RowSpacing="6">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Spacing="2" Visibility="{x:Bind local:LogView.ToVisibility(ViewModel.HasMessageTemplate), Mode=OneWay}">
+                        <TextBlock Text="Message template" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock x:Name="TemplateText" Text="{x:Bind ViewModel.MessageTemplateText, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                                   AutomationProperties.Name="Message template" />
+                    </StackPanel>
+                    <TextBlock
+                        Grid.Row="1"
+                        Text="Right-click a property, or press the menu key, to filter by its value."
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind local:LogView.ToVisibility(ViewModel.HasProperties), Mode=OneWay}" />
+                    <TextBlock
+                        Grid.Row="2"
+                        Text="{x:Bind ViewModel.NoPropertiesText, Mode=OneWay}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind local:LogView.ToVisibilityUnless(ViewModel.HasProperties), Mode=OneWay}" />
+                    <ListView
+                        x:Name="PropertiesList"
+                        Grid.Row="2"
+                        ItemsSource="{x:Bind ViewModel.SelectedProperties, Mode=OneWay}"
+                        SelectionMode="Single"
+                        Visibility="{x:Bind local:LogView.ToVisibility(ViewModel.HasProperties), Mode=OneWay}"
+                        AutomationProperties.Name="Properties">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="Padding" Value="4,0" />
+                                <Setter Property="MinHeight" Value="32" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="vm:PropertyRow">
+                                <Grid ColumnSpacing="8" Padding="0,4" Background="Transparent"
+                                      AutomationProperties.Name="{x:Bind local:LogView.DescribeProperty(Name, ValueText)}">
+                                    <Grid.ContextFlyout>
+                                        <MenuFlyout>
+                                            <MenuFlyoutItem Text="Filter to this value" Click="OnPropertyFilterClick">
+                                                <MenuFlyoutItem.Icon>
+                                                    <FontIcon Glyph="&#xE71C;" />
+                                                </MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutItem Text="Exclude this value" Click="OnPropertyExcludeClick">
+                                                <MenuFlyoutItem.Icon>
+                                                    <FontIcon Glyph="&#xE711;" />
+                                                </MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutSeparator />
+                                            <MenuFlyoutItem Text="Copy value" Click="OnPropertyCopyClick">
+                                                <MenuFlyoutItem.Icon>
+                                                    <FontIcon Glyph="&#xE8C8;" />
+                                                </MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                        </MenuFlyout>
+                                    </Grid.ContextFlyout>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*" MaxWidth="200" />
+                                        <ColumnDefinition Width="3*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                               ToolTipService.ToolTip="{x:Bind Name}" />
+                                    <TextBlock Grid.Column="1" Text="{x:Bind ValueText}" TextWrapping="Wrap" MaxLines="4" TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" IsTextSelectionEnabled="True" />
+                                    <Button Grid.Column="2" Padding="6" Background="Transparent" BorderThickness="0" Click="OnPropertyFilterClick"
+                                            ToolTipService.ToolTip="Filter to this value" AutomationProperties.Name="Filter to this value" IsTabStop="False">
+                                        <FontIcon Glyph="&#xE71C;" FontSize="12" />
+                                    </Button>
+                                    <Button Grid.Column="3" Padding="6" Background="Transparent" BorderThickness="0" Click="OnPropertyExcludeClick"
+                                            ToolTipService.ToolTip="Exclude this value" AutomationProperties.Name="Exclude this value" IsTabStop="False">
+                                        <FontIcon Glyph="&#xE711;" FontSize="12" />
+                                    </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
 
                 <!-- ===== Statistics of the listed events (FR-X1, FR-X2) ===== -->
                 <ScrollViewer x:Name="StatisticsPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="Statistics">

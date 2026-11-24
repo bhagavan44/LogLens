@@ -214,6 +214,16 @@ public class ColumnLayoutTests
     }
 
     [Fact]
+    public void A_format_with_a_source_context_shows_the_context_column_unless_hidden()
+    {
+        Assert.Equal(0, GridMetrics.For(null, false, hasSource: false).ContextColumnWidth);
+        Assert.Equal(GridMetrics.DefaultContextColumnWidth, GridMetrics.For(null, false, hasSource: false, hasContext: true).ContextColumnWidth);
+        Assert.Equal(0, GridMetrics.For(new ColumnLayout { ShowContext = false }, false, false, hasContext: true).ContextColumnWidth);
+        Assert.Equal(300, GridMetrics.For(new ColumnLayout { ContextWidth = 300 }, false, false, hasContext: true).ContextColumnWidth);
+        Assert.Equal(ColumnLayout.MaxWidth, new ColumnLayout { ContextWidth = 9000 }.Normalised().ContextWidth);
+    }
+
+    [Fact]
     public void A_hidden_column_is_zero_wide_and_the_others_keep_their_width()
     {
         var noTime = GridMetrics.For(new ColumnLayout { ShowTime = false }, false, false);

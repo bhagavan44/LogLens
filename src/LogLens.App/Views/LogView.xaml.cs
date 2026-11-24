@@ -113,9 +113,13 @@ public sealed partial class LogView : UserControl
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(LogViewModel.IsMerged))
+        if (e.PropertyName is nameof(LogViewModel.IsMerged) or nameof(LogViewModel.HasSourceContext))
         {
-            ApplyLayout(); // a merged view gets its Source column once the files are known
+            ApplyLayout(); // a merged view gets its Source column once the files are known, a structured log its Context column once detected
+        }
+        else if (e.PropertyName == nameof(LogViewModel.HasStructuredFields) && !ViewModel.HasStructuredFields && DetailTabs.SelectedItem == PropertiesTab)
+        {
+            DetailTabs.SelectedItem = MessageTab;
         }
         else if (e.PropertyName == nameof(LogViewModel.NewestFirst))
         {
@@ -186,13 +190,22 @@ public sealed partial class LogView : UserControl
     /// <summary>Sizes the header and the rows to the column layout and the wrap option; a hidden column is 0 wide.</summary>
     private void ApplyLayout()
     {
-        _metrics = GridMetrics.For(_columns, _applied.WrapMessages, ViewModel.IsMerged, _applied.FontSize, _applied.RowDensity, _applied.TimestampFormat);
+        _metrics = GridMetrics.For(
+            _columns,
+            _applied.WrapMessages,
+            ViewModel.IsMerged,
+            _applied.FontSize,
+            _applied.RowDensity,
+            _applied.TimestampFormat,
+            hasContext: ViewModel.HasSourceContext);
         HeaderTimeColumn.Width = new GridLength(_metrics.TimeColumnWidth);
         HeaderLevelColumn.Width = new GridLength(_metrics.LevelColumnWidth);
         HeaderSourceColumn.Width = new GridLength(_metrics.SourceColumnWidth);
+        HeaderContextColumn.Width = new GridLength(_metrics.ContextColumnWidth);
         TimeHeaderText.Visibility = TimeGrip.Visibility = ToVisibility(_metrics.TimeColumnWidth > 0);
         LevelHeaderText.Visibility = ToVisibility(_metrics.LevelColumnWidth > 0);
         SourceHeaderText.Visibility = SourceGrip.Visibility = ToVisibility(_metrics.SourceColumnWidth > 0);
+        ContextHeaderText.Visibility = ContextGrip.Visibility = ToVisibility(_metrics.ContextColumnWidth > 0);
         EventGrid.Metrics = _metrics;
     }
 
@@ -204,17 +217,30 @@ public sealed partial class LogView : UserControl
         ColumnLevelItem.IsChecked = _columns.ShowLevel;
         ColumnSourceItem.IsChecked = _columns.ShowSource;
         ColumnSourceItem.IsEnabled = ViewModel.IsMerged;
+        ColumnContextItem.IsChecked = _columns.ShowContext;
+        ColumnContextItem.IsEnabled = ViewModel.HasSourceContext;
     }
 
     private void OnColumnToggleClick(object sender, RoutedEventArgs e)
-        => CommitColumns(_columns with { ShowTime = ColumnTimeItem.IsChecked, ShowLevel = ColumnLevelItem.IsChecked, ShowSource = ColumnSourceItem.IsChecked });
+        => CommitColumns(_columns with
+        {
+            ShowTime = ColumnTimeItem.IsChecked,
+            ShowLevel = ColumnLevelItem.IsChecked,
+            ShowSource = ColumnSourceItem.IsChecked,
+            ShowContext = ColumnContextItem.IsChecked,
+        });
 
-    private void OnColumnResetClick(object sender, RoutedEventArgs e) => CommitColumns(_columns with { TimeWidth = null, SourceWidth = null });
+    private void OnColumnResetClick(object sender, RoutedEventArgs e) => CommitColumns(_columns with { TimeWidth = null, SourceWidth = null, ContextWidth = null });
 
-    private double GripWidth(object? grip) => ReferenceEquals(grip, TimeGrip) ? _metrics.TimeColumnWidth : _metrics.SourceColumnWidth;
+    private double GripWidth(object? grip)
+        => ReferenceEquals(grip, TimeGrip) ? _metrics.TimeColumnWidth
+            : ReferenceEquals(grip, ContextGrip) ? _metrics.ContextColumnWidth
+            : _metrics.SourceColumnWidth;
 
     private ColumnLayout WithGripWidth(object? grip, double? width)
-        => ReferenceEquals(grip, TimeGrip) ? _columns with { TimeWidth = width } : _columns with { SourceWidth = width };
+        => ReferenceEquals(grip, TimeGrip) ? _columns with { TimeWidth = width }
+            : ReferenceEquals(grip, ContextGrip) ? _columns with { ContextWidth = width }
+            : _columns with { SourceWidth = width };
 
     private void OnGripDragStarted(object? sender, EventArgs e) => _gripStartWidth = GripWidth(sender);
 
@@ -782,11 +808,43 @@ public sealed partial class LogView : UserControl
         MessageBox.Visibility = selected == MessageTab ? Visibility.Visible : Visibility.Collapsed;
         ExceptionBox.Visibility = selected == ExceptionTab ? Visibility.Visible : Visibility.Collapsed;
         RawBox.Visibility = selected == RawTab ? Visibility.Visible : Visibility.Collapsed;
+        PropertiesPanel.Visibility = selected == PropertiesTab ? Visibility.Visible : Visibility.Collapsed;
         StatisticsPanel.Visibility = selected == StatisticsTab ? Visibility.Visible : Visibility.Collapsed;
         CopyExceptionButton.Visibility = ExceptionBox.Visibility;
 
         // The statistics are only computed (and kept up to date) while they are showing.
         ViewModel.StatisticsVisible = selected == StatisticsTab;
+    }
+
+    // ----- properties (FR-D5) -----
+
+    /// <summary>What a screen reader hears for a row of the properties table.</summary>
+    public static string DescribeProperty(string name, string value) => $"{name}: {value}";
+
+    private static PropertyRow? RowOf(object sender) => (sender as FrameworkElement)?.DataContext as PropertyRow;
+
+    private void OnPropertyFilterClick(object sender, RoutedEventArgs e)
+    {
+        if (RowOf(sender) is { } row)
+        {
+            ViewModel.FilterToProperty(row, exclude: false);
+        }
+    }
+
+    private void OnPropertyExcludeClick(object sender, RoutedEventArgs e)
+    {
+        if (RowOf(sender) is { } row)
+        {
+            ViewModel.FilterToProperty(row, exclude: true);
+        }
+    }
+
+    private void OnPropertyCopyClick(object sender, RoutedEventArgs e)
+    {
+        if (RowOf(sender) is { } row)
+        {
+            SetClipboard(row.ValueText);
+        }
     }
 
     private void OnCopyRequested(object? sender, bool raw) => CopySelection(raw);

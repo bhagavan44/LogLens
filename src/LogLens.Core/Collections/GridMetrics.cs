@@ -14,13 +14,15 @@ namespace LogLens.Core.Collections;
 /// <param name="SourceColumnWidth">0 when the column is hidden or the log has no Source column.</param>
 /// <param name="MessageLines">How many lines of a message a row shows.</param>
 /// <param name="FontSize">Size of the log text in the rows.</param>
+/// <param name="ContextColumnWidth">0 when the column is hidden or the log's format has no <c>SourceContext</c>.</param>
 public readonly record struct GridMetrics(
     double RowHeight,
     double TimeColumnWidth,
     double LevelColumnWidth,
     double SourceColumnWidth,
     int MessageLines = 1,
-    double FontSize = GridMetrics.DefaultFontSize)
+    double FontSize = GridMetrics.DefaultFontSize,
+    double ContextColumnWidth = 0)
 {
     public const double DefaultFontSize = AppSettings.DefaultFontSize;
 
@@ -34,6 +36,9 @@ public readonly record struct GridMetrics(
 
     /// <summary>The file name column of a merged view (FR-O4) until the user drags it.</summary>
     public const double DefaultSourceColumnWidth = 160;
+
+    /// <summary>The Context column (the logging class) until the user drags it.</summary>
+    public const double DefaultContextColumnWidth = 200;
 
     /// <summary>Lines a message can use when wrapping is on. Two keeps long messages readable without making rows tall.</summary>
     public const int WrappedMessageLines = 2;
@@ -58,13 +63,15 @@ public readonly record struct GridMetrics(
     /// <param name="fontSize">Size of the log text (FR-P2); clamped to what the settings accept.</param>
     /// <param name="density">Compact rows have less space around the text (FR-P2).</param>
     /// <param name="timeFormat">Format of the Time column (FR-G5); the column is sized to fit it unless the user dragged it.</param>
+    /// <param name="hasContext">The log's format has a <c>SourceContext</c>, so it can show a Context column.</param>
     public static GridMetrics For(
         ColumnLayout? columns,
         bool wrapMessages,
         bool hasSource,
         double fontSize = DefaultFontSize,
         RowDensity density = RowDensity.Comfortable,
-        string? timeFormat = null)
+        string? timeFormat = null,
+        bool hasContext = false)
     {
         var layout = (columns ?? new ColumnLayout()).Normalised();
         var size = double.IsFinite(fontSize) ? Math.Clamp(fontSize, AppSettings.MinFontSize, AppSettings.MaxFontSize) : DefaultFontSize;
@@ -82,7 +89,8 @@ public readonly record struct GridMetrics(
             layout.ShowLevel ? Math.Round(DefaultLevelColumnWidth * size / DefaultFontSize) : 0,
             hasSource && layout.ShowSource ? layout.SourceWidth ?? DefaultSourceColumnWidth : 0,
             lines,
-            size);
+            size,
+            hasContext && layout.ShowContext ? layout.ContextWidth ?? DefaultContextColumnWidth : 0);
     }
 
     private static double LineHeightFor(double size) => Math.Ceiling(size * LineHeight / DefaultFontSize);
