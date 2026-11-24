@@ -18,6 +18,7 @@
                 <ColumnDefinition x:Name="TimeColumn" />
                 <ColumnDefinition x:Name="LevelColumn" />
                 <ColumnDefinition Width="16" />
+                <ColumnDefinition x:Name="ContextColumn" Width="0" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition x:Name="SourceColumn" Width="0" />
             </Grid.ColumnDefinitions>
@@ -30,9 +31,12 @@
             </Border>
             <FontIcon x:Name="ExceptionIcon" Grid.Column="2" Glyph="&#xE7BA;" FontSize="12" VerticalAlignment="Center"
                       Foreground="{ThemeResource SystemFillColorCautionBrush}" Visibility="Collapsed" />
-            <TextBlock x:Name="MessageText" Grid.Column="3" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxLines="1" />
+            <!-- The logging class (SourceContext), for formats that have one. -->
+            <TextBlock x:Name="ContextText" Grid.Column="3" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxLines="1"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" Visibility="Collapsed" />
+            <TextBlock x:Name="MessageText" Grid.Column="4" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxLines="1" />
             <!-- FR-O4: the file of each event, in a merged view only. -->
-            <TextBlock x:Name="SourceText" Grid.Column="4" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxLines="1"
+            <TextBlock x:Name="SourceText" Grid.Column="5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxLines="1"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" Visibility="Collapsed" />
         </Grid>
 

@@ -158,6 +158,11 @@
                     <RadioMenuFlyoutItem x:Name="TimeSincePreviousItem" Text="Time since the previous event" GroupName="TimeColumn" Tag="SincePrevious" Click="OnTimeModeClick" />
                     <RadioMenuFlyoutItem x:Name="TimeSinceSelectedItem" Text="Time since the selected event" GroupName="TimeColumn" Tag="SinceSelected" Click="OnTimeModeClick" />
                 </MenuFlyoutSubItem>
+                <MenuFlyoutSeparator />
+                <!-- FR-F1: the format the log in front is read with; items are added in code (built-in formats and custom templates). -->
+                <MenuFlyoutSubItem x:Name="FormatMenu" Text="Format" IsEnabled="False">
+                    <MenuFlyoutSubItem.Icon><FontIcon Glyph="&#xE8A5;" /></MenuFlyoutSubItem.Icon>
+                </MenuFlyoutSubItem>
             </MenuBarItem>
             <MenuBarItem Title="Navigate">
                 <MenuFlyoutItem x:Name="GoToItem" Text="Go to event or time…" Click="OnGoTo" IsEnabled="False">

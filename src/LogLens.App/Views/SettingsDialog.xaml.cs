@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Globalization;
 using LogLens.Core.Filtering;
+using LogLens.Core.Formats;
+using LogLens.Core.Formats.SerilogText;
 using LogLens.Core.Models;
 using LogLens.Core.Settings;
 using LogLens.Infrastructure;
@@ -14,7 +16,8 @@ using Windows.Storage.Pickers;
 namespace LogLens.App.Views;
 
 /// <summary>
-/// Settings (FR-P1 … FR-P6, FR-S6): appearance, timestamps, start-up, hide rules, <i>Open with</i> and settings export / import. Nothing is
+/// Settings (FR-P1 … FR-P6, FR-S6, FR-F2): appearance, timestamps, start-up, custom output templates, hide rules, <i>Open with</i> and settings
+/// export / import. Nothing is
 /// applied until Save, except <i>Open with</i>, which changes the registry at once (it has its own Register / Remove buttons).
 /// </summary>
 public sealed partial class SettingsDialog : ContentDialog
@@ -24,6 +27,7 @@ public sealed partial class SettingsDialog : ContentDialog
     private readonly AppPaths _paths;
     private readonly IntPtr _hwnd;
     private readonly List<RuleRow> _rules = [];
+    private readonly List<TemplateRow> _templates = [];
     private readonly FileAssociations _associations = new();
     private AppSettings _base;
 
@@ -76,6 +80,16 @@ public sealed partial class SettingsDialog : ContentDialog
         }
 
         UpdateRulesHint();
+
+        TemplatesPanel.Children.Clear();
+        _templates.Clear();
+        foreach (var template in s.CustomTemplates)
+        {
+            AddTemplateRow(template);
+        }
+
+        UpdateTemplatesHint();
+        ValidateTemplates();
         UpdateFormatPreview();
         SavedFiltersText.Text = s.SavedFilters.Count == 0
             ? "None yet. Save the query and levels of a log from its Saved menu, then pick them again in any log."
@@ -95,6 +109,9 @@ public sealed partial class SettingsDialog : ContentDialog
         HideRules = [.. _rules
             .Where(r => !string.IsNullOrWhiteSpace(r.Query.Text))
             .Select(r => new HideRule { Name = r.Name.Text.Trim(), Query = r.Query.Text.Trim(), Enabled = r.Enabled.IsChecked == true })],
+        CustomTemplates = [.. _templates
+            .Where(t => !t.IsBlank)
+            .Select(t => new CustomTemplate(t.Name.Text.Trim(), t.Template.Text.Trim()))],
     };
 
     /// <summary>An editable ComboBox updates SelectedItem / Text only when the text is committed: read whichever is current.</summary>
@@ -102,11 +119,11 @@ public sealed partial class SettingsDialog : ContentDialog
 
     private void OnSaveClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
-        var problems = _rules.Count(r => !Validate(r)) + (TimestampFormatError() is null ? 0 : 1);
+        var problems = _rules.Count(r => !Validate(r)) + (TimestampFormatError() is null ? 0 : 1) + ValidateTemplates();
         if (problems > 0)
         {
             args.Cancel = true; // the messages next to the fields say what to fix
-            FileStatusText.Text = "Fix the marked fields first (or switch the rule off, or delete it).";
+            FileStatusText.Text = "Fix the marked fields first (or switch the rule off, or delete the rule or template).";
             return;
         }
 
@@ -243,6 +260,91 @@ public sealed partial class SettingsDialog : ContentDialog
     }
 
     private void UpdateRulesHint() => NoRulesText.Visibility = _rules.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    // ------------------------------------------------------------------ custom output templates (FR-F2)
+
+    /// <summary>The controls of one custom template in the editor.</summary>
+    private sealed record TemplateRow(StackPanel Panel, TextBox Name, TextBox Template, TextBox Test, TextBlock Status)
+    {
+        public bool IsBlank => string.IsNullOrWhiteSpace(Name.Text) && string.IsNullOrWhiteSpace(Template.Text);
+    }
+
+    private void OnAddTemplateClick(object sender, RoutedEventArgs e)
+    {
+        var row = AddTemplateRow(new CustomTemplate(string.Empty, OutputTemplate.DefaultText));
+        UpdateTemplatesHint();
+        ValidateTemplates();
+        row.Name.Focus(FocusState.Programmatic);
+    }
+
+    private TemplateRow AddTemplateRow(CustomTemplate template)
+    {
+        var name = new TextBox { Text = template.Name, PlaceholderText = "Name, e.g. Shop API", Width = 160 };
+        var text = new TextBox { Text = template.Template, PlaceholderText = OutputTemplate.DefaultText, FontFamily = LogFormat.CodeFont };
+        var test = new TextBox { PlaceholderText = "Paste a line from the log to test the template", FontFamily = LogFormat.CodeFont };
+        var remove = new Button { Content = new SymbolIcon(Symbol.Delete), Padding = new Thickness(8, 4, 8, 4) };
+        var status = new TextBlock { Style = (Style)Resources["Hint"] };
+
+        AutomationProperties.SetName(name, "Template name");
+        AutomationProperties.SetName(text, "Output template");
+        AutomationProperties.SetName(test, "Test line");
+        AutomationProperties.SetName(remove, "Delete template");
+        AutomationProperties.SetLiveSetting(status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+        ToolTipService.SetToolTip(remove, "Delete this template");
+
+        var line = new Grid { ColumnSpacing = 8 };
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(text, 1);
+        Grid.SetColumn(remove, 2);
+        line.Children.Add(name);
+        line.Children.Add(text);
+        line.Children.Add(remove);
+
+        var panel = new StackPanel { Spacing = 4 };
+        panel.Children.Add(line);
+        panel.Children.Add(test);
+        panel.Children.Add(status);
+
+        var row = new TemplateRow(panel, name, text, test, status);
+        name.TextChanged += (_, _) => ValidateTemplates(); // a name can clash with another row's
+        text.TextChanged += (_, _) => ValidateTemplate(row);
+        test.TextChanged += (_, _) => ValidateTemplate(row);
+        remove.Click += (_, _) =>
+        {
+            _templates.Remove(row);
+            TemplatesPanel.Children.Remove(panel);
+            UpdateTemplatesHint();
+            ValidateTemplates();
+        };
+
+        _templates.Add(row);
+        TemplatesPanel.Children.Add(panel);
+        return row;
+    }
+
+    /// <summary>Checks every template row; returns how many have a problem (blank rows are dropped on Save, not a problem).</summary>
+    private int ValidateTemplates() => _templates.Count(row => !ValidateTemplate(row));
+
+    /// <summary>Shows what is wrong with a template, or what it reads from the test line.</summary>
+    private bool ValidateTemplate(TemplateRow row)
+    {
+        if (row.IsBlank)
+        {
+            row.Status.Style = (Style)Resources["Hint"];
+            row.Status.Text = "Empty: dropped when the settings are saved.";
+            return true;
+        }
+
+        var others = _templates.Where(t => !ReferenceEquals(t, row) && !t.IsBlank).Select(t => t.Name.Text);
+        var error = FormatCatalog.CheckCustomTemplate(row.Name.Text, row.Template.Text, others);
+        row.Status.Style = (Style)Resources[error is null ? "Hint" : "ErrorHint"];
+        row.Status.Text = error ?? FormatCatalog.TestLine(row.Template.Text, row.Test.Text);
+        return error is null;
+    }
+
+    private void UpdateTemplatesHint() => NoTemplatesText.Visibility = _templates.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
     // ------------------------------------------------------------------ Open with (FR-P5)
 

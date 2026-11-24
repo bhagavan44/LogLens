@@ -1,5 +1,6 @@
 using LogLens.App.Services;
 using LogLens.Core.Diagnostics;
+using LogLens.Core.Formats;
 using LogLens.Core.Settings;
 using LogLens.Core.State;
 using LogLens.Core.Streaming;
@@ -96,7 +97,12 @@ public partial class App : Application
         services.AddSingleton(sp => new RecentFilesService(sp.GetRequiredService<IStateStore>()));
         services.AddSingleton(sp => new SessionService(sp.GetRequiredService<IStateStore>()));
         services.AddSingleton(sp => new BookmarkService(sp.GetRequiredService<IStateStore>()));
-        services.AddSingleton<ILogStreamFactory>(_ => new FileLogStreamFactory());
+        services.AddSingleton<Func<FormatCatalog>>(sp =>
+        {
+            var settings = sp.GetRequiredService<SettingsService>();
+            return () => settings.Formats; // custom templates take effect for the next file opened
+        });
+        services.AddSingleton<ILogStreamFactory>(sp => new FileLogStreamFactory(formats: sp.GetRequiredService<Func<FormatCatalog>>()));
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();
         return services.BuildServiceProvider();
