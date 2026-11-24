@@ -94,10 +94,10 @@ public sealed class PlainTextLogParser
                 progress?.Report((double)pos / text.Length);
             }
 
-            if (TryStartEvent(text, lineStart, lineEnd, out var timestamp, out var level, out var firstLineMessage))
+            if (TryStartEvent(text, lineStart, lineEnd, out var timestamp, out var level, out var firstLineMessage, out var properties))
             {
                 Flush();
-                state.Begin(lineStart, lineEnd, timestamp, level, firstLineMessage);
+                state.Begin(lineStart, lineEnd, timestamp, level, firstLineMessage, properties);
                 continue;
             }
 
@@ -147,11 +147,22 @@ public sealed class PlainTextLogParser
         }
     }
 
-    private bool TryStartEvent(string text, int start, int end, out DateTimeOffset timestamp, out LogLevel level, out string message)
+    /// <summary>True when the line starts an event of this template (used by format detection, FR-F1).</summary>
+    internal bool IsEventStart(string line) => TryStartEvent(line, 0, line.Length, out _, out _, out _, out _);
+
+    private bool TryStartEvent(
+        string text,
+        int start,
+        int end,
+        out DateTimeOffset timestamp,
+        out LogLevel level,
+        out string message,
+        out Dictionary<string, LogValue>? properties)
     {
         timestamp = default;
         level = LogLevel.Unknown;
         message = string.Empty;
+        properties = null;
 
         var length = end - start;
         if (length == 0 || (_template.StartsWithDigit && (uint)(text[start] - '0') > 9))
@@ -184,7 +195,37 @@ public sealed class PlainTextLogParser
         level = LogLevelParser.Parse(text.AsSpan(lvl.Index, lvl.Length));
         var msg = match.Groups["msg"];
         message = text.Substring(msg.Index, msg.Length);
+
+        var names = _template.PropertyNames;
+        if (names.Count > 0)
+        {
+            properties = new Dictionary<string, LogValue>(names.Count, StringComparer.Ordinal);
+            for (var i = 0; i < names.Count; i++)
+            {
+                var group = match.Groups[PropertyGroups[i]];
+                properties[names[i]] = PropertyValue(text.AsSpan(group.Index, group.Length));
+            }
+        }
+
         return true;
+    }
+
+    private static readonly string[] PropertyGroups = [.. Enumerable.Range(0, 64).Select(i => "p" + i.ToString(System.Globalization.CultureInfo.InvariantCulture))];
+
+    /// <summary>A property written by the template: quoted text loses its quotes, a whole number becomes a number, anything else stays text.</summary>
+    private static LogValue PropertyValue(ReadOnlySpan<char> raw)
+    {
+        if (raw.Length >= 2 && raw[0] == '"' && raw[^1] == '"')
+        {
+            return new LogValue(raw[1..^1].ToString().Replace("\\\"", "\"", StringComparison.Ordinal).Replace("\\\\", "\\", StringComparison.Ordinal));
+        }
+
+        if (raw.Length is > 0 and < 19 && long.TryParse(raw, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var number))
+        {
+            return new LogValue(number);
+        }
+
+        return new LogValue(raw.ToString());
     }
 
     /// <summary>True if <paramref name="line"/> begins an exception: a "Namespace.XyzException: ..." header or a "   at Foo.Bar(...)" frame.</summary>
@@ -220,6 +261,7 @@ public sealed class PlainTextLogParser
         private string _message;
         private int _messageContinuationStart;
         private int _exceptionStart;
+        private Dictionary<string, LogValue>? _properties;
         private bool _active;
 
         public readonly bool Active => _active;
@@ -227,8 +269,9 @@ public sealed class PlainTextLogParser
         /// <summary>Index in the parsed text of the first character of the event being built.</summary>
         public readonly int Start => _start;
 
-        public void Begin(int start, int lineEnd, DateTimeOffset timestamp, LogLevel level, string message)
+        public void Begin(int start, int lineEnd, DateTimeOffset timestamp, LogLevel level, string message, Dictionary<string, LogValue>? properties)
         {
+            _properties = properties;
             _active = true;
             _start = start;
             _end = lineEnd;
@@ -282,7 +325,7 @@ public sealed class PlainTextLogParser
                 message = string.Concat(_message, "\n", text.AsSpan(_messageContinuationStart, _end - _messageContinuationStart));
             }
 
-            return new LogEvent(id, sourceFile, baseOffset + _start, _end - _start, _timestamp, _level, message, exception);
+            return new LogEvent(id, sourceFile, baseOffset + _start, _end - _start, _timestamp, _level, message, exception, Properties: _properties);
         }
 
         public void Reset() => this = default;

@@ -1,0 +1,7 @@
+2026-11-13 08:00:00.012 +05:30 [INF] (1) Shop.Program: Application starting up
+2026-11-13 08:00:01.120 +05:30 [INF] (1) Microsoft.Hosting.Lifetime: Now listening on: http://localhost:5000
+2026-11-13 08:00:04.888 +05:30 [WRN] (12) Shop.Payments.PaymentService: Retry 2/3 for payment gateway after timeout of 664 ms
+2026-11-13 08:00:05.301 +05:30 [ERR] (12) Shop.Payments.PaymentService: Payment failed for order 67204
+System.InvalidOperationException: Sequence contains no matching element
+   at System.Linq.ThrowHelper.ThrowNoMatchException()
+2026-11-13 08:00:06.251 +05:30 [DBG] (7) Shop.Orders.OrderHandler: Order 93346 shipped to customer 2468

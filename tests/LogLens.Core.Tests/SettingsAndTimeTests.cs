@@ -2,6 +2,7 @@ using System.Reflection;
 using LogLens.Core.Analysis;
 using LogLens.Core.Collections;
 using LogLens.Core.Filtering;
+using LogLens.Core.Formats;
 using LogLens.Core.Models;
 using LogLens.Core.Settings;
 
@@ -256,6 +257,7 @@ public class SettingsModelTests
             [nameof(AppSettings.HintsSeen)] = new() { HintsSeen = true },
             [nameof(AppSettings.HideRules)] = new() { HideRules = [new HideRule { Query = "@m = 'x'" }] },
             [nameof(AppSettings.SavedFilters)] = new() { SavedFilters = [new SavedFilter { Name = "n" }] },
+            [nameof(AppSettings.CustomTemplates)] = new() { CustomTemplates = [new CustomTemplate("n", "{Timestamp} {Level} {Message}")] },
         };
 
         var settable = typeof(AppSettings).GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanWrite).Select(p => p.Name);

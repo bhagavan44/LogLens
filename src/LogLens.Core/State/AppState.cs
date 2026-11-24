@@ -38,6 +38,9 @@ public sealed record SessionTab
     /// <summary>The files of a merged view (FR-O4), or null for a single file.</summary>
     public IReadOnlyList<string>? MergedFiles { get; init; }
 
+    /// <summary>Id of the format the user chose for the tab (FR-F1); null when the format is detected.</summary>
+    public string? Format { get; init; }
+
     /// <summary>The entry names a file, or at least two files to merge (a hand-edited file may hold empty ones).</summary>
     public bool IsValid()
         => MergedFiles is null

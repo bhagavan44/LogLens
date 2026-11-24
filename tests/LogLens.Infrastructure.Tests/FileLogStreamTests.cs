@@ -199,6 +199,8 @@ internal sealed class SpyFormat(System.Collections.Concurrent.ConcurrentBag<int>
     public ILogParser CreateParser(string? sourceFile, long startOffset = 0, int firstId = 0)
         => new SpyParser(LogFormats.SerilogText.CreateParser(sourceFile, startOffset, firstId), threads);
 
+    public bool Recognises(string line) => LogFormats.SerilogText.Recognises(line);
+
     private sealed class SpyParser(ILogParser real, System.Collections.Concurrent.ConcurrentBag<int> threads) : ILogParser
     {
         public int CommittedId => real.CommittedId;

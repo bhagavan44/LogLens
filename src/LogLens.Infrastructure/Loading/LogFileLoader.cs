@@ -14,10 +14,12 @@ public sealed class LogFileLoader
     private readonly ILogFormat _format;
     private readonly int _chunkBytes;
 
+    /// <param name="format">The format to read files with; null detects each file's format among the built-in ones (FR-F1).</param>
+    /// <param name="chunkBytes">Largest read at once.</param>
     public LogFileLoader(ILogFormat? format = null, int chunkBytes = 4 * 1024 * 1024)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(chunkBytes, 4);
-        _format = format ?? LogFormats.Default;
+        _format = format ?? LogFormats.Detect;
         _chunkBytes = chunkBytes;
     }
 
@@ -55,6 +57,10 @@ public sealed class LogFileLoader
                     document.Apply(chunk.Delta);
                     document.EncodingName = chunk.EncodingName;
                     document.FileSizeBytes = chunk.FileLength;
+                    if (chunk.Format is { } detected)
+                    {
+                        document.Format = detected;
+                    }
                     if (chunk.FileLength > 0)
                     {
                         progress?.Report(Math.Min(1, (double)chunk.BytesRead / chunk.FileLength));

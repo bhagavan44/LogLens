@@ -18,6 +18,7 @@ public sealed class MergedLogStream : ILogStream
     private readonly LogFileLoader _loader;
 
     /// <param name="paths">The files, in the order ties are broken; duplicates are ignored.</param>
+    /// <param name="format">The format of every file; null detects each file's format among the built-in ones (FR-F1).</param>
     public MergedLogStream(IReadOnlyList<string> paths, ILogFormat? format = null)
     {
         ArgumentNullException.ThrowIfNull(paths);
@@ -27,7 +28,7 @@ public sealed class MergedLogStream : ILogStream
             throw new ArgumentException("Choose at least one file to merge.", nameof(paths));
         }
 
-        Format = format ?? LogFormats.Default;
+        Format = format ?? LogFormats.Detect;
         _loader = new LogFileLoader(Format);
     }
 
@@ -62,7 +63,8 @@ public sealed class MergedLogStream : ILogStream
             InitialLoadComplete: true,
             FilePath: _paths[^1],
             EncodingName: encodings,
-            MergedFiles: merged.Files);
+            MergedFiles: merged.Files,
+            Format: LogFormats.Combine(documents.Select(d => d.Format)));
     }
 
     private async Task<(MergedLog Merged, LogDocument[] Documents)> LoadAndMergeAsync(CancellationToken cancellationToken)

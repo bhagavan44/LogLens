@@ -152,7 +152,8 @@ public class OutputTemplateTests
 
         Assert.True(match.Success);
         Assert.True(template.HasSourceContext);
-        Assert.Equal("Shop.Payments", match.Groups["ctx"].Value);
+        Assert.Equal([LogEvent.SourceContextProperty], template.PropertyNames);
+        Assert.Equal("Shop.Payments", match.Groups["p0"].Value);
         Assert.Equal("WRN", match.Groups["lvl"].Value);
         Assert.Equal("Retry 2/3", match.Groups["msg"].Value);
     }
@@ -178,7 +179,9 @@ public class OutputTemplateTests
     [InlineData("{Level:u3} {Message}")]                         // no timestamp
     [InlineData("{Timestamp:HH:mm} {Message}")]                  // no level
     [InlineData("{Timestamp:HH:mm} {Level:u3}")]                 // no message
-    [InlineData("{Timestamp:HH:mm} {Level:u3} {Message} {Props}")] // unsupported token
+    [InlineData("{Timestamp:HH:mm} {Level:u3} {Message} {Properties}")] // unsupported token
+    [InlineData("{Timestamp:HH:mm} {Level:u3} {Message} {A-B}")]   // not a property name
+    [InlineData("{Timestamp:HH:mm} {Level:u3} {A} {Message} {A}")] // a property twice
     [InlineData("{Timestamp:HH:mm {Level:u3} {Message}")]        // unterminated
     [InlineData("{Timestamp:HH:mm} {Level:u3} {Message} }")]     // stray }
     public void Invalid_templates_are_rejected(string template)

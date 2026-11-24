@@ -115,16 +115,19 @@ internal static class Eventually
     }
 }
 
-/// <summary>A stream the test drives: batches are written to it, or it fails, or it ends.</summary>
-internal sealed class FakeStream(string path) : ILogStream
+/// <summary>
+/// A stream the test drives: batches are written to it, or it fails, or it ends. With <paramref name="parseAs"/> the text is parsed with that
+/// format and every batch names it, as a detecting stream's batches do.
+/// </summary>
+internal sealed class FakeStream(string path, ILogFormat? parseAs = null) : ILogStream
 {
     private readonly Channel<StreamBatch> _channel = Channel.CreateUnbounded<StreamBatch>();
-    private ILogParser _parser = LogFormats.SerilogText.CreateParser(path);
+    private ILogParser _parser = (parseAs ?? LogFormats.SerilogText).CreateParser(path);
     private long _bytes;
 
     public string Path { get; } = path;
 
-    public ILogFormat Format => LogFormats.SerilogText;
+    public ILogFormat Format => parseAs ?? LogFormats.SerilogText;
 
     public bool Follow { get; set; }
 
@@ -140,7 +143,7 @@ internal sealed class FakeStream(string path) : ILogStream
     public FakeStream Write(string text, bool initialLoadComplete = false, long? fileLength = null)
     {
         _bytes += text.Length;
-        _channel.Writer.TryWrite(new ChunkBatch(text, _parser.Append(text), _bytes, fileLength ?? _bytes, initialLoadComplete, Path, "UTF-8"));
+        _channel.Writer.TryWrite(new ChunkBatch(text, _parser.Append(text), _bytes, fileLength ?? _bytes, initialLoadComplete, Path, "UTF-8", Format: parseAs));
         return this;
     }
 
@@ -152,7 +155,7 @@ internal sealed class FakeStream(string path) : ILogStream
     /// <summary>The file was truncated: the next writes start a new parse.</summary>
     public void Reset(string reason = "The file got shorter, so it was read again from the start.")
     {
-        _parser = LogFormats.SerilogText.CreateParser(Path);
+        _parser = Format.CreateParser(Path);
         _bytes = 0;
         Send(new ResetBatch(reason));
     }
@@ -180,22 +183,25 @@ internal sealed class FakeStream(string path) : ILogStream
 /// <summary>Hands out <see cref="FakeStream"/>s: one prepared per path, or a missing file.</summary>
 internal sealed class FakeStreams : ILogStreamFactory
 {
-    private readonly Dictionary<string, Func<FakeStream>> _streams = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Func<ILogFormat?, FakeStream>> _streams = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _texts = new(StringComparer.OrdinalIgnoreCase);
 
     public List<string> Requested { get; } = [];
 
     public List<FakeStream> Opened { get; } = [];
 
-    /// <summary>Opening <paramref name="path"/> loads <paramref name="text"/> at once.</summary>
-    public void Returns(string path, string? text = null)
+    /// <summary>
+    /// Opening <paramref name="path"/> loads <paramref name="text"/> at once, parsed with the format asked for or else
+    /// <paramref name="detected"/> (the default format when null).
+    /// </summary>
+    public void Returns(string path, string? text = null, ILogFormat? detected = null)
     {
         _texts[path] = text ?? TestSupport.Text;
-        _streams[path] = () => new FakeStream(path).Load(text ?? TestSupport.Text);
+        _streams[path] = format => new FakeStream(path, format ?? detected).Load(text ?? TestSupport.Text);
     }
 
     /// <summary>Opening <paramref name="path"/> fails with <paramref name="exception"/>.</summary>
-    public void Throws(string path, Exception exception) => _streams[path] = () =>
+    public void Throws(string path, Exception exception) => _streams[path] = _ =>
     {
         var stream = new FakeStream(path);
         stream.Fail(exception);
@@ -206,14 +212,18 @@ internal sealed class FakeStreams : ILogStreamFactory
     public FakeStream Waits(string path)
     {
         var stream = new FakeStream(path);
-        _streams[path] = () => stream;
+        _streams[path] = _ => stream;
         return stream;
     }
 
-    public ILogStream Open(string path)
+    /// <summary>The format asked for with each <see cref="Open"/> / <see cref="OpenMerged"/>, in order (null: detect).</summary>
+    public List<ILogFormat?> RequestedFormats { get; } = [];
+
+    public ILogStream Open(string path, ILogFormat? format = null)
     {
         Requested.Add(path);
-        var stream = _streams.TryGetValue(path, out var make) ? make() : Missing(path);
+        RequestedFormats.Add(format);
+        var stream = _streams.TryGetValue(path, out var make) ? make(format) : Missing(path);
         Opened.Add(stream);
         return stream;
     }
@@ -221,9 +231,10 @@ internal sealed class FakeStreams : ILogStreamFactory
     public List<IReadOnlyList<string>> MergeRequests { get; } = [];
 
     /// <summary>A merged view of files prepared with <see cref="Returns"/>; a file that was not prepared is missing.</summary>
-    public ILogStream OpenMerged(IReadOnlyList<string> paths)
+    public ILogStream OpenMerged(IReadOnlyList<string> paths, ILogFormat? format = null)
     {
         MergeRequests.Add(paths);
+        RequestedFormats.Add(format);
         var stream = new FakeStream(paths[^1]);
         Opened.Add(stream);
         if (paths.FirstOrDefault(p => !_texts.ContainsKey(p)) is { } missing)

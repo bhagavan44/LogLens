@@ -48,8 +48,15 @@ public sealed class LogDocument
     /// <summary>The document is a merged view of several files.</summary>
     public bool IsMerged => MergedFiles is not null;
 
-    /// <summary>The format the events were parsed with.</summary>
-    public ILogFormat Format { get; }
+    /// <summary>
+    /// The format the events were parsed with. Starts as the format the file was opened with; when that was "detect" (FR-F1) it becomes the
+    /// detected format once the first lines have been read.
+    /// </summary>
+    public ILogFormat Format
+    {
+        get;
+        set => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
 
     /// <summary>The decoded file contents; <see cref="LogEvent.Offset"/> / <see cref="LogEvent.Length"/> index into it.</summary>
     public TextStore Text { get; } = new();

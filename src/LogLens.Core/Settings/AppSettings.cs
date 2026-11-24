@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using LogLens.Core.Formats;
 using LogLens.Core.Models;
 
 namespace LogLens.Core.Settings;
@@ -26,8 +27,14 @@ public sealed record ColumnLayout
     /// <summary>Width of the Source column; null uses the default.</summary>
     public double? SourceWidth { get; init; }
 
+    /// <summary>Show the Context column (the <c>SourceContext</c> property) for logs whose format has one; other logs never have it.</summary>
+    public bool ShowContext { get; init; } = true;
+
+    /// <summary>Width of the Context column; null uses the default.</summary>
+    public double? ContextWidth { get; init; }
+
     /// <summary>The layout with widths rounded and kept between <see cref="MinWidth"/> and <see cref="MaxWidth"/>; unusable widths become automatic.</summary>
-    public ColumnLayout Normalised() => this with { TimeWidth = Clamp(TimeWidth), SourceWidth = Clamp(SourceWidth) };
+    public ColumnLayout Normalised() => this with { TimeWidth = Clamp(TimeWidth), SourceWidth = Clamp(SourceWidth), ContextWidth = Clamp(ContextWidth) };
 
     private static double? Clamp(double? width)
         => width is { } w && double.IsFinite(w) ? Math.Clamp(Math.Round(w), MinWidth, MaxWidth) : null;
@@ -76,7 +83,7 @@ public sealed record SavedFilter
 
 /// <summary>
 /// User settings (<c>settings.json</c>, SPEC §6.5): appearance (FR-P1, FR-P2), timestamps and start-up (FR-P3), hide rules and saved
-/// filters (FR-P4), and the view options of the grid. The column layout and <see cref="HintsSeen"/> belong to this PC and are left out of
+/// filters (FR-P4), custom output templates (FR-F2), and the view options of the grid. The column layout and <see cref="HintsSeen"/> belong to this PC and are left out of
 /// an exported settings file.
 /// </summary>
 public sealed record AppSettings
@@ -140,8 +147,14 @@ public sealed record AppSettings
     /// <summary>Named filters that can be recalled from the filter bar (FR-S7).</summary>
     public IReadOnlyList<SavedFilter> SavedFilters { get; init; } = [];
 
+    /// <summary>The user's own Serilog output templates (FR-F2), offered next to the built-in formats and tried by detection (FR-F1).</summary>
+    public IReadOnlyList<CustomTemplate> CustomTemplates { get; init; } = [];
+
     /// <summary>How timestamps are shown with these settings.</summary>
     public TimeDisplay ToTimeDisplay() => new(TimestampZone, TimestampFormat);
+
+    /// <summary>The formats files can be read with: the built-in ones and <see cref="CustomTemplates"/>.</summary>
+    public FormatCatalog ToFormatCatalog() => CustomTemplates.Count == 0 ? FormatCatalog.BuiltIn : new FormatCatalog(CustomTemplates);
 
     /// <summary>
     /// The settings with every value a hand-edited or imported file could make unusable put right: sizes clamped, unknown enum values and
@@ -165,6 +178,12 @@ public sealed record AppSettings
             .Where(f => f is not null && !string.IsNullOrWhiteSpace(f.Name))
             .Select(f => f with { Name = f.Name.Trim(), Query = f.Query?.Trim() ?? string.Empty })
             .DistinctBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxListLength)
+            .ToList(),
+        CustomTemplates = (CustomTemplates ?? [])
+            .Where(t => t is not null && !string.IsNullOrWhiteSpace(t.Name) && !string.IsNullOrWhiteSpace(t.Template))
+            .Select(t => new CustomTemplate(t.Name.Trim(), t.Template.Trim()))
+            .DistinctBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
             .Take(MaxListLength)
             .ToList(),
     };
@@ -198,7 +217,8 @@ public sealed record AppSettings
            && Equals(Columns, other.Columns)
            && HintsSeen == other.HintsSeen
            && SequenceEqual(HideRules, other.HideRules)
-           && SequenceEqual(SavedFilters, other.SavedFilters);
+           && SequenceEqual(SavedFilters, other.SavedFilters)
+           && SequenceEqual(CustomTemplates, other.CustomTemplates);
 
     public override int GetHashCode()
         => HashCode.Combine(Theme, FontFamily, FontSize, TimestampZone, TimestampFormat, NewestFirst, HideRules?.Count, SavedFilters?.Count);
@@ -240,6 +260,27 @@ public sealed class SettingsService
     }
 
     public AppSettings Current { get; private set; }
+
+    /// <summary>
+    /// The formats files can be read with under the current settings (built-in plus custom templates). The same instance is returned until the
+    /// custom templates change, so a format chosen for a tab stays the same object across unrelated setting changes.
+    /// </summary>
+    public FormatCatalog Formats
+    {
+        get
+        {
+            var templates = Current.CustomTemplates;
+            if (_formats is not { } cached || !cached.Templates.SequenceEqual(templates))
+            {
+                cached = (templates, Current.ToFormatCatalog());
+                _formats = cached;
+            }
+
+            return cached.Catalog;
+        }
+    }
+
+    private (IReadOnlyList<CustomTemplate> Templates, FormatCatalog Catalog)? _formats;
 
     /// <summary>Raised after the settings changed.</summary>
     public event EventHandler? Changed;

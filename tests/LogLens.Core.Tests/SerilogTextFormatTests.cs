@@ -19,15 +19,15 @@ public class SerilogTextFormatTests
         """.ReplaceLineEndings("\n");
 
     [Fact]
-    public void Registry_offers_serilog_text_as_the_only_and_default_format()
+    public void Registry_offers_the_built_in_formats_with_serilog_text_as_the_default()
     {
-        var format = Assert.Single(LogFormats.All);
+        Assert.Equal([LogFormats.Clef, LogFormats.SerilogJson, LogFormats.SerilogText], LogFormats.All);
+        Assert.Equal(["clef", "serilog-json", "serilog-text"], LogFormats.All.Select(f => f.Id));
 
+        var format = LogFormats.Default;
         Assert.Same(LogFormats.SerilogText, format);
-        Assert.Same(format, LogFormats.Default);
-        Assert.Equal("serilog-text", format.Id);
         Assert.Equal("Serilog text", format.DisplayName);
-        Assert.Equal(LogFields.Exception, format.Fields);
+        Assert.Equal(LogFields.Exception, format.Fields); // the default template writes no properties
     }
 
     [Theory]
