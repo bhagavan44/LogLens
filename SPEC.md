@@ -59,17 +59,22 @@ statistics and export work on the common `LogEvent` model and never special-case
 | # | Format | Example | Release |
 |---|---|---|---|
 | F1 | **Serilog plain text** (default output template) | `2026-11-13 10:15:32.123 +05:30 [INF] Order 42 shipped` | **v1.0** |
-| F2 | Serilog compact JSON / CLEF | `{"@t":"2026-11-13T04:45:32.123Z","@mt":"Order {Id} shipped","@l":"Information","Id":42}` | Later |
-| F3 | Serilog classic JSON | `{"Timestamp":"…","Level":"Information","MessageTemplate":"…","Properties":{…}}` | Later |
-| F4 | Custom Serilog output templates | `{Timestamp:HH:mm:ss} {Level:u3} {SourceContext} {Message}` | Later |
+| F2 | Serilog compact JSON / CLEF | `{"@t":"2026-11-13T04:45:32.123Z","@mt":"Order {Id} shipped","@l":"Information","Id":42}` | v1.x structured formats |
+| F3 | Serilog classic JSON | `{"Timestamp":"…","Level":"Information","MessageTemplate":"…","Properties":{…}}` | v1.x structured formats |
+| F4 | Custom Serilog output templates | `{Timestamp:HH:mm:ss} {Level:u3} {SourceContext} {Message}` | v1.x structured formats |
 | F5 | Other loggers (NLog, log4net, Microsoft.Extensions.Logging console, custom regex) | — | Later |
 
 ### 2.1 Detection and parsing
 
-- **FR-F1** Each file is read by one format. *(v1: always F1.)* Once several formats exist, detect
-  the format per file from the first ~50 non-empty lines, and let the user override it.
+- **FR-F1** Each file is read by one format, detected per file from its first ~50 non-empty lines
+  (the format recognising the most lines wins; JSON formats, then custom templates, then the default
+  template on a tie; the default template when nothing matches). The user can override it per tab
+  (*View ▸ Format*); the choice is remembered with the tab. A live log that starts empty is detected
+  from its first complete line; the next file of a rolling log keeps the detected format.
 - **FR-F2** Plain-text parsing is template-driven: an output template is compiled to a regular
-  expression. v1 ships the default Serilog template only.
+  expression. The default Serilog template is built in; users add their own templates in Settings,
+  with a test line that shows what a template reads. Any property token (`{SourceContext}`,
+  `{ThreadId}` …) becomes a property of the event; `{Properties}` is not supported.
 - **FR-F3** **Multi-line events** (messages with newlines, stack traces) attach to the preceding
   event: any line that doesn't match the start-of-event pattern is a continuation line.
 - **FR-F4** Level mapping accepts full names (`Information`) and abbreviations (`INF`, `I`),
@@ -126,7 +131,8 @@ statistics and export work on the common `LogEvent` model and never special-case
 - **FR-S3** **Find**: case, whole word, regex, include exception text; matches highlighted; F3 /
   Shift+F3; *only matches* with ± context events.
 - **FR-S4** **Query bar** with a small expression language: `= != < <= > >=`, `and or not`, `in`,
-  `like`, `contains`, `startswith`, `exists()`, fields `@l @t @m @x`. Errors shown inline with
+  `like`, `contains`, `startswith`, `exists()`, fields `@l @t @m @x @mt`, and properties by name
+  (`RequestId`, a dotted path such as `Http.Status`, or `@p['Any name']`). Errors shown inline with
   their position; an invalid query keeps the last valid one applied.
 - **FR-S5** **Quick filters** from the context menu: show / hide events like this one, show only /
   hide this level, ±30 s around this event.
@@ -329,7 +335,8 @@ Each release is usable on its own and is published on GitHub with a portable exe
 | **v0.4** – Many logs | Tabs in the title bar, open folder, merge view, bookmarks, find all containing | Follow a request across files |
 | **v0.5** – Analyse & export | Timeline, statistics, export, relative time column, newest first, wrapped messages, column layout | Feature-complete for Serilog text |
 | **v1.0** – Polish & ship | Settings dialog, saved filters, hide rules, settings export / import, Open with, `--data-dir`, crash reports, first-run hints, accessibility pass | First stable release |
-| **v1.x** – More formats | CLEF and classic JSON with auto-detect, properties pane and property filters, custom templates; then NLog, log4net, custom regex | Structured logs and other loggers |
+| **v1.x** – Structured formats | CLEF and classic JSON with auto-detect and a per-tab override, properties pane and property filters, Context column, custom templates | Structured logs |
+| **v1.x** – Other loggers | NLog, log4net, custom regex | Logs not written by Serilog |
 | **v1.x** – Remote hosts | Open logs over SSH / SFTP and Windows shares; remote tail | Logs on servers without RDP |
 
 ## 9. Future ideas

@@ -3,11 +3,11 @@
 A fast, offline log viewer for Windows. LogLens turns a text log into a filterable, searchable
 grid, follows logs while they are being written, and never changes the files it opens.
 
-> **Status: early development.** The first release reads log files written by
-> [Serilog](https://serilog.net)'s file sink with its default text template:
-> `{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}`.
-> More formats (CLEF / JSON, NLog, log4net, custom templates) are planned; see the
-> [roadmap](SPEC.md#8-roadmap).
+> **Status: early development.** LogLens reads the files written by [Serilog](https://serilog.net):
+> text with the default template
+> (`{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}`) or your
+> own output template, compact JSON (CLEF) and classic JSON. Other loggers (NLog, log4net, custom
+> regular expressions) are planned; see the [roadmap](SPEC.md#8-roadmap).
 
 ## Install
 
@@ -45,12 +45,22 @@ the *Open with* menu in *Settings*.
 
 The **event list** shows one row per event: time (as logged, or in your time zone or UTC, see
 [Settings](#settings)), level and the first line of the message.
-A ⚠ marks events that carry an exception. Lines before the first event that don't match the format
-are shown as *unparsed* rows instead of being dropped.
+A ⚠ marks events that carry an exception. Lines that don't match the format are shown as *unparsed*
+rows instead of being dropped.
+
+**Formats.** LogLens recognises each file's format from its first lines: Serilog text with the default
+template, Serilog compact JSON (CLEF, as written by `CompactJsonFormatter`) and classic JSON
+(`JsonFormatter`), plus any output templates you add in [Settings](#settings). The status bar names the
+format. If a file is read wrongly, pick its format under *View ▸ Format*; the tab is read again with it,
+and the choice is remembered with the tab. *Detect automatically* goes back to detection. Structured logs
+(JSON, or a template with properties such as `{SourceContext}`) get a **Context** column naming the
+logging class.
 
 The **detail pane** on the right shows the selected event: the full message, the exception with its
 stack trace (*Copy exception*), and the raw text exactly as in the file, with the file name, line
-and event number above.
+and event number above. For structured logs the **Properties** tab shows the message template and every
+property; the buttons next to a value (or right-click it) filter the list to that value or exclude it,
+and *Copy value* copies it.
 
 ### Finding things
 
@@ -63,11 +73,14 @@ events are left (*120 of 5,000 events*), and *Clear filters* removes them all at
   1 hour around the selected event, or a custom *From* / *To* range. A time without a date, such as
   `08:15`, uses the date of the first event.
 - **Query** (Ctrl+L): a small expression language over `@l` (level), `@t` (timestamp), `@m`
-  (message) and `@x` (exception), for example
-  `@l >= 'Warning' and @m like '%payment%'` or `exists(@x) and @t >= '2026-11-13 10:00'`.
+  (message), `@x` (exception) and, in structured logs, `@mt` (message template) and properties by name,
+  for example `@l >= 'Warning' and @m like '%payment%'`, `exists(@x) and @t >= '2026-11-13 10:00'` or
+  `Elapsed > 500 and SourceContext like 'Shop.%'`. A dotted name reaches into a structure
+  (`Http.Status = 500`); a property whose name is not a plain word is written `@p['Request Id']`.
   Operators: `= != < <= > >=`, `in [...]`, `like` (`%` and `_`), `contains`, `startswith`,
-  `endswith`, `matches` (regular expression), `exists()`, `and`, `or`, `not` and parentheses. Text
-  comparisons ignore case. A mistake is shown under the bar with its position, and the last valid
+  `endswith`, `matches` (regular expression), `exists()`, `and`, `or`, `not` and parentheses. Values are
+  text in quotes, numbers, `true`, `false` and `null`. Text comparisons ignore case; a number matches a
+  property holding that number; an event without the property matches no comparison except `= null`. A mistake is shown under the bar with its position, and the last valid
   query stays applied until you fix it. Click **?** for the syntax.
 - **Quick filters**: right-click an event to show only, or hide, events like it (the same message
   with different numbers, ids or quoted values), show only or hide its level, or show the events
@@ -155,7 +168,8 @@ exceptions. Numbers, ids and quoted values count as one, so *Order 41 shipped* a
 one line. Click a line to show only those events.
 
 **Export** (*File ▸ Export…*, Ctrl+S) writes the events in the list, or just the selected ones, as CSV,
-JSON lines, a self-contained HTML page, the original lines, or a Markdown table. Events are always written
+JSON lines (with the message template and properties of structured events), a self-contained HTML page,
+the original lines, or a Markdown table. Events are always written
 oldest first. In a CSV, text that starts with `=`, `+`, `-` or `@` gets a leading `'` so a spreadsheet
 never runs it as a formula. Right-click ▸ *Copy as Markdown table* puts the selected events on the clipboard,
 ready for a ticket.
@@ -167,8 +181,8 @@ Other *View* options:
   same height.
 - **Time column** shows each event's time since the previous event, or since the selected one
   (*+120 ms*, *+3.204 s*), instead of its timestamp. This setting is not remembered.
-- **Columns:** right-click the list header to hide or show the Time, Level and Source columns, and drag a
-  header edge (or focus it and use the arrow keys; Home resets) to resize. The layout, the row order,
+- **Columns:** right-click the list header to hide or show the Time, Level, Context and Source columns, and
+  drag a header edge (or focus it and use the arrow keys; Home resets) to resize. The layout, the row order,
   wrapping and the timeline are remembered.
 
 | Shortcut | Action |
@@ -188,6 +202,11 @@ Other *View* options:
   The detail pane always adds the offset.
 - **Opening and following**: reopen last time's tabs at start-up (on by default), and start every file
   you open with tail on.
+- **Formats**: add the output template your app writes its text logs with, under a name, for example
+  `{Timestamp:HH:mm:ss} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}`. Paste a line from
+  the log to check what the template reads from it. Any property token (`{SourceContext}`, `{ThreadId}`,
+  `{RequestId}` …) becomes a property you can filter on; `{Properties}` is not supported. Custom templates
+  are tried when a file opens and offered under *View ▸ Format*.
 - **Hide rules**: add, name, switch off or delete them. A rule with a mistake is marked and has to be
   fixed (or switched off) before saving.
 - **Open with**: *Register* adds LogLens to Explorer's *Open with* menu for `.log` (and, if you tick them,
