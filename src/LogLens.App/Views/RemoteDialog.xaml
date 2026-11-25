@@ -26,7 +26,9 @@
         </Style>
     </ContentDialog.Resources>
 
-    <Grid Width="720" Height="430">
+    <!-- 430 high, or less in a small window: the lists shrink so the buttons below them stay in view (see OnRootLoaded) -->
+    <Grid x:Name="Root" Width="720" MaxHeight="430" Loaded="OnRootLoaded">
+        <Border Width="0" Height="430" IsHitTestVisible="False" />
 
         <!-- 1. The hosts -->
         <Grid x:Name="HostsPanel" RowSpacing="8">

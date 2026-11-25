@@ -126,6 +126,24 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
 
     private static Visibility Visible(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
 
+    /// <summary>
+    /// The dialog puts its content in a scroll viewer, so in a window too low for the content the buttons under the lists end up
+    /// out of sight. Without vertical scrolling the content is measured against the height that is left and asks for at most
+    /// that (the 430-high border only sets the size wanted); the lists' rows then shrink instead. The edit form scrolls by itself.
+    /// </summary>
+    private void OnRootLoaded(object sender, RoutedEventArgs e)
+    {
+        for (var node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(Root); node is not null && !ReferenceEquals(node, this); node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+        {
+            if (node is ScrollViewer scroller)
+            {
+                scroller.VerticalScrollMode = ScrollMode.Disabled;
+                scroller.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+                return;
+            }
+        }
+    }
+
     private void OnPrimaryClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
         switch (_stage)
