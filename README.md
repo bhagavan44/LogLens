@@ -234,8 +234,8 @@ Other *View* options:
   above them.
 - **Hide rules**: add, name, switch off or delete them. A rule with a mistake is marked and has to be
   fixed (or switched off) before saving.
-- **Open with**: *Register* adds LogLens to Explorer's *Open with* menu for `.log` (and, if you tick them,
-  `.clef`, `.txt` and `.json`) for your Windows user only: no administrator rights, and your default
+- **Open with**: *Register* adds LogLens to Explorer's *Open with* menu for `.log` and `.clef` (and, if you
+  tick them, `.txt` and `.json`) for your Windows user only: no administrator rights, and your default
   programs stay as they are. *Remove* takes it out again. After moving or updating the exe, register
   again.
 - **Settings file**: *Export…* saves your settings to a file and *Import…* loads one, to set up another
@@ -257,8 +257,8 @@ LogLens.exe [--data-dir <folder>] [--new-window] [--merge] [<log file> ...]
 
 Each file opens in a tab of its own.
 
-- `--data-dir <folder>` keeps the settings, recent files, bookmarks, open tabs and diagnostics in
 - `--merge` opens the files as one merged view instead, ordered by time with a *Source* column.
+- `--data-dir <folder>` keeps the settings, recent files, bookmarks, open tabs and diagnostics in
   `<folder>\LogLens` instead of `%APPDATA%\LogLens` and `%LOCALAPPDATA%\LogLens`, for a portable copy
   or for testing. Each folder is a separate LogLens.
 - `--new-window` starts a separate LogLens instead of handing the file to the running one; it does not

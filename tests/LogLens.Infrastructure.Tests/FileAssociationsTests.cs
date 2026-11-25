@@ -145,6 +145,6 @@ public sealed class FileAssociationsTests : IDisposable
     public void Unregister_is_safe_when_nothing_is_registered() => NewAssociations().Unregister(Exe);
 
     [Fact]
-    public void Only_log_is_ticked_until_the_user_chooses()
-        => Assert.Equal([".log"], FileAssociations.DefaultExtensions);
+    public void Log_and_clef_are_ticked_until_the_user_chooses()
+        => Assert.Equal([".log", ".clef"], FileAssociations.DefaultExtensions);
 }
