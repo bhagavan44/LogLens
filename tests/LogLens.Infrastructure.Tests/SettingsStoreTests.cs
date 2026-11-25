@@ -44,7 +44,11 @@ public sealed class JsonSettingsStoreTests : IDisposable
             WrapMessages = true,
             ShowTimeline = true,
             Columns = new ColumnLayout { ShowLevel = false, TimeWidth = 120, SourceWidth = 220, ShowContext = false, ContextWidth = 250 },
-            CustomTemplates = [new CustomTemplate("Shop", "{Timestamp:HH:mm:ss} {Level:u3} {SourceContext} {Message}")],
+            CustomTemplates =
+            [
+                new CustomTemplate("Shop", "{Timestamp:HH:mm:ss} {Level:u3} {SourceContext} {Message}"),
+                new CustomTemplate("Legacy", "%date %-5level %message%newline", TemplateKind.Log4Net),
+            ],
         });
 
         var loaded = new JsonSettingsStore(Paths).Load();
@@ -56,7 +60,12 @@ public sealed class JsonSettingsStoreTests : IDisposable
         Assert.Equal(220, loaded.Columns.SourceWidth);
         Assert.False(loaded.Columns.ShowContext);
         Assert.Equal(250, loaded.Columns.ContextWidth);
-        Assert.Equal(new CustomTemplate("Shop", "{Timestamp:HH:mm:ss} {Level:u3} {SourceContext} {Message}"), Assert.Single(loaded.CustomTemplates));
+        Assert.Equal(
+            [
+                new CustomTemplate("Shop", "{Timestamp:HH:mm:ss} {Level:u3} {SourceContext} {Message}"),
+                new CustomTemplate("Legacy", "%date %-5level %message%newline", TemplateKind.Log4Net),
+            ],
+            loaded.CustomTemplates);
         Assert.False(File.Exists(Paths.SettingsFile + ".tmp"));
     }
 
@@ -71,6 +80,17 @@ public sealed class JsonSettingsStoreTests : IDisposable
 
         File.WriteAllText(Paths.SettingsFile, """{ "columns": null }""");
         Assert.Equal(new ColumnLayout(), new JsonSettingsStore(Paths).Load().Columns);
+    }
+
+    [Fact]
+    public void Custom_templates_saved_before_kinds_existed_load_as_serilog_templates()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(Paths.SettingsFile)!);
+        File.WriteAllText(Paths.SettingsFile, """{ "customTemplates": [ { "name": "Shop", "template": "{Timestamp} {Level} {Message}" } ] }""");
+
+        var template = Assert.Single(new JsonSettingsStore(Paths).Load().CustomTemplates);
+
+        Assert.Equal(new CustomTemplate("Shop", "{Timestamp} {Level} {Message}", TemplateKind.Serilog), template);
     }
 
     [Fact]

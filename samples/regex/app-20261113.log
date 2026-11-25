@@ -1,0 +1,7 @@
+[13/Nov/2026 08:00:00.012] info  (pid 4120) Shop.Program :: Application starting up
+[13/Nov/2026 08:00:01.120] info  (pid 4120) Microsoft.Hosting.Lifetime :: Now listening on: http://localhost:5000
+[13/Nov/2026 08:00:04.888] warn  (pid 4120) Shop.Payments.PaymentService :: Retry 2/3 for payment gateway after timeout of 664 ms
+[13/Nov/2026 08:00:05.301] error (pid 4120) Shop.Payments.PaymentService :: Payment failed for order 67204
+System.InvalidOperationException: Sequence contains no matching element
+   at System.Linq.ThrowHelper.ThrowNoMatchException()
+[13/Nov/2026 08:00:06.251] debug (pid 4121) Shop.Orders.OrderHandler :: Order 93346 shipped to customer 2468

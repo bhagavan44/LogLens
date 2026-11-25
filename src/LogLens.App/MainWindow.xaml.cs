@@ -467,7 +467,7 @@ public sealed partial class MainWindow : Window
 
     /// <summary>
     /// View ▸ Format: "Detect automatically" (naming what was detected) and every format of the catalog, the one the log in front is read with
-    /// ticked; choosing one reads the log again with it. Rebuilt whenever it could change: another tab, a format detected, custom templates edited.
+    /// ticked; choosing one reads the log again with it. Rebuilt whenever it could change: another tab, a format detected, custom formats edited.
     /// </summary>
     private void SyncFormatMenu(LogViewModel? log)
     {
@@ -496,8 +496,8 @@ public sealed partial class MainWindow : Window
         }
 
         FormatMenu.Items.Add(new MenuFlyoutSeparator());
-        var edit = new MenuFlyoutItem { Text = "Custom templates…" };
-        ToolTipService.SetToolTip(edit, "Add the output template of your app's text logs (Settings ▸ Formats)");
+        var edit = new MenuFlyoutItem { Text = "Custom formats…" };
+        ToolTipService.SetToolTip(edit, "Add the output template, layout, pattern or regular expression of your app's text logs (Settings ▸ Formats)");
         edit.Click += OnSettings;
         FormatMenu.Items.Add(edit);
     }

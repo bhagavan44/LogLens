@@ -147,7 +147,10 @@ public sealed record AppSettings
     /// <summary>Named filters that can be recalled from the filter bar (FR-S7).</summary>
     public IReadOnlyList<SavedFilter> SavedFilters { get; init; } = [];
 
-    /// <summary>The user's own Serilog output templates (FR-F2), offered next to the built-in formats and tried by detection (FR-F1).</summary>
+    /// <summary>
+    /// The user's own formats (FR-F2): Serilog output templates, NLog layouts, log4net patterns and regular expressions, offered next to the
+    /// built-in formats and tried by detection (FR-F1).
+    /// </summary>
     public IReadOnlyList<CustomTemplate> CustomTemplates { get; init; } = [];
 
     /// <summary>How timestamps are shown with these settings.</summary>
@@ -182,7 +185,7 @@ public sealed record AppSettings
             .ToList(),
         CustomTemplates = (CustomTemplates ?? [])
             .Where(t => t is not null && !string.IsNullOrWhiteSpace(t.Name) && !string.IsNullOrWhiteSpace(t.Template))
-            .Select(t => new CustomTemplate(t.Name.Trim(), t.Template.Trim()))
+            .Select(t => new CustomTemplate(t.Name.Trim(), t.Template.Trim(), Enum.IsDefined(t.Kind) ? t.Kind : TemplateKind.Serilog))
             .DistinctBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
             .Take(MaxListLength)
             .ToList(),

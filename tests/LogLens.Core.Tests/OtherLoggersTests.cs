@@ -318,3 +318,151 @@ public class OtherLoggerFormatsTests
     public void Level_names_of_other_loggers_map_to_levels(string text, LogLevel expected)
         => Assert.Equal(expected, LogLevelParser.Parse(text));
 }
+
+public class RegexLinePatternTests
+{
+    private const string SampleRegex = @"\[(?<timestamp>[^\]]+)\] (?<level>\w+)\s+\(pid (?<Pid>\d+)\) (?<logger>\S+) :: (?<message>.*)";
+
+    [Fact]
+    public void Named_groups_give_time_level_message_logger_and_properties()
+    {
+        var pattern = RegexLinePattern.Parse(SampleRegex);
+        var e = OtherLoggers.One(pattern, "[13/Nov/2026 08:00:04.888] warn  (pid 4120) Shop.Payments :: Retry 2/3");
+
+        Assert.Equal(OtherLoggers.Local(8, 0, 4, 888), e.Timestamp);
+        Assert.Equal(LogLevel.Warning, e.Level);
+        Assert.Equal("Retry 2/3", e.Message);
+        Assert.Equal("Shop.Payments", e.SourceContext);
+        Assert.Equal(new LogValue(4120L), e.Property("Pid"));
+        Assert.Equal(["Pid", "SourceContext"], pattern.PropertyNames);
+        Assert.False(pattern.StartsWithDigit);
+    }
+
+    [Fact]
+    public void The_expression_is_anchored_at_the_start_of_the_line()
+    {
+        var events = OtherLoggers.Parse(RegexLinePattern.Parse(@"(?<timestamp>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) (?<message>.*)"), """
+            2026-11-13 08:00:00 first
+            see 2026-11-13 08:00:01 inside a line
+            """);
+
+        Assert.Equal("first\nsee 2026-11-13 08:00:01 inside a line", Assert.Single(events).Message);
+    }
+
+    [Fact]
+    public void Date_and_time_groups_read_together_and_level_is_optional()
+    {
+        var e = OtherLoggers.One(RegexLinePattern.Parse(@"(?<date>\S+) (?<time>\S+) (?<message>.*)"), "2026-11-13 08:00:04,888 hello");
+
+        Assert.Equal(OtherLoggers.Local(8, 0, 4, 888), e.Timestamp);
+        Assert.Equal(LogLevel.Unknown, e.Level);
+    }
+
+    [Fact]
+    public void An_exception_group_and_a_time_that_does_not_parse()
+    {
+        var pattern = RegexLinePattern.Parse(@"(?<timestamp>\S+ \S+) (?<message>.*?)(?: !! (?<exception>.*))?$");
+        var events = OtherLoggers.Parse(pattern, """
+            2026-11-13 08:00:00 failed !! System.Exception: bad
+               at A.B()
+            not-a-date 08:00:01 continuation, not an event
+            """);
+
+        var e = Assert.Single(events);
+        Assert.Equal("failed", e.Message);
+        Assert.Equal("System.Exception: bad\n   at A.B()\nnot-a-date 08:00:01 continuation, not an event", e.Exception);
+    }
+
+    [Theory]
+    [InlineData("(?<message>.*)", "timestamp")]
+    [InlineData(@"(?<timestamp>\S+) .*", "message")]
+    [InlineData("(?<timestamp>[ (?<message>.*)", "Not a valid regular expression")]
+    public void Unusable_expressions_say_what_is_wrong(string expression, string expected)
+        => Assert.Contains(expected, Assert.Throws<FormatException>(() => RegexLinePattern.Parse(expression)).Message);
+}
+
+public class CustomFormatKindsTests
+{
+    private const string Regex = @"\[(?<timestamp>[^\]]+)\] (?<level>\w+)\s+\(pid (?<Pid>\d+)\) (?<logger>\S+) :: (?<message>.*)";
+
+    private const string OutputTemplateText = "{Timestamp:HH:mm:ss} {Level:u3} {Message}";
+
+    [Fact]
+    public void Custom_formats_of_every_kind_join_the_catalog_and_detection()
+    {
+        var catalog = new FormatCatalog(
+        [
+            new CustomTemplate("App", Regex, TemplateKind.Regex),
+            new CustomTemplate("Pipes", "${date:format=HH\\:mm\\:ss} ${level} ${message}", TemplateKind.NLog),
+            new CustomTemplate("Log4", "%d{ABSOLUTE} %-5p %m%n", TemplateKind.Log4Net),
+            new CustomTemplate("Broken", "%level %message", TemplateKind.Log4Net), // no date: left out
+        ]);
+
+        Assert.Equal(["template:App", "template:Pipes", "template:Log4"], catalog.Custom.Select(f => f.Id));
+        Assert.Equal(["App", "Pipes", "Log4"], catalog.Custom.Select(f => f.DisplayName));
+        Assert.Equal("template:App", catalog.Detect(OtherLoggers.Lines(OtherLoggers.Sample("regex", "app-20261113.log"))).Id);
+        Assert.Equal("template:Log4", catalog.Detect(["08:00:04,888 INFO  started", "08:00:05,000 WARN  slow"]).Id);
+    }
+
+    [Fact]
+    public void The_regex_sample_reads_with_its_custom_format()
+    {
+        var format = new FormatCatalog([new CustomTemplate("App", Regex, TemplateKind.Regex)]).Find("template:App")!;
+        var parser = format.CreateParser("app.log");
+        var events = parser.Append(OtherLoggers.Sample("regex", "app-20261113.log")).Events.Concat(parser.Complete().Events).DistinctBy(e => e.Id).ToList();
+
+        Assert.Equal(5, events.Count);
+        Assert.All(events, e => Assert.False(e.IsUnparsed));
+        Assert.Equal(LogLevel.Error, events[3].Level);
+        Assert.StartsWith("System.InvalidOperationException", events[3].Exception);
+        Assert.Equal(LogFields.Exception | LogFields.Properties | LogFields.SourceContext, format.Fields);
+    }
+
+    [Theory]
+    [InlineData(TemplateKind.Serilog, "{Timestamp} {Message}", "{Level}")]
+    [InlineData(TemplateKind.NLog, "${level} ${message}", "date or time")]
+    [InlineData(TemplateKind.Log4Net, " ", "log4net conversion pattern")]
+    [InlineData(TemplateKind.Regex, "(?<message>.*)", "timestamp")]
+    public void Checking_a_template_uses_its_kind(TemplateKind kind, string template, string expected)
+        => Assert.Contains(expected, FormatCatalog.CheckCustomTemplate("Mine", template, [], kind));
+
+    [Fact]
+    public void Testing_a_line_shows_what_each_kind_reads()
+    {
+        var nlog = FormatCatalog.TestLine(NLogLayout.DefaultText, "2026-11-13 08:00:04.8884|WARN|Shop|Retry", TemplateKind.NLog);
+        var regex = FormatCatalog.TestLine(Regex, "[13/Nov/2026 08:00:04.888] warn  (pid 7) Shop :: Retry", TemplateKind.Regex);
+        var exception = FormatCatalog.TestLine("${longdate} ${message} ${exception}", "2026-11-13 08:00:04.8884 boom System.Exception: bad", TemplateKind.NLog);
+
+        Assert.Contains("level Warning", nlog);
+        Assert.Contains("SourceContext = Shop", nlog);
+        Assert.Contains("Pid = 7", regex);
+        Assert.Contains("exception \"System.Exception: bad\"", exception);
+        Assert.Equal("The line doesn't match the template.", FormatCatalog.TestLine(Log4NetPattern.DefaultText, "nothing like it", TemplateKind.Log4Net));
+    }
+
+    [Fact]
+    public void Each_kind_has_a_name_and_a_starting_template_that_compiles()
+    {
+        foreach (var kind in Enum.GetValues<TemplateKind>())
+        {
+            Assert.False(string.IsNullOrWhiteSpace(FormatCatalog.KindName(kind)));
+            Assert.Null(FormatCatalog.CheckCustomTemplate("Mine", FormatCatalog.DefaultTemplate(kind), [], kind));
+        }
+    }
+
+    [Fact]
+    public void Settings_keep_the_kind_and_repair_an_unknown_one()
+    {
+        var settings = new Settings.AppSettings
+        {
+            CustomTemplates =
+            [
+                new CustomTemplate("A", NLogLayout.DefaultText, TemplateKind.NLog),
+                new CustomTemplate("B", OutputTemplateText, (TemplateKind)42),
+            ],
+        }.Normalised();
+
+        Assert.Equal([TemplateKind.NLog, TemplateKind.Serilog], settings.CustomTemplates.Select(t => t.Kind));
+        Assert.IsType<TextLogFormat>(settings.ToFormatCatalog().Find("template:A"));
+    }
+}
