@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.0](https://github.com/bhagavan44/LogLens/compare/v1.1.0...v1.2.0) (2026-11-25)
+
+
+### Features
+
+* filter and duplicate remote hosts ([#18](https://github.com/bhagavan44/LogLens/issues/18)) ([3a0fb28](https://github.com/bhagavan44/LogLens/commit/3a0fb288b883599102b98126a3f2e67967ba4114))
+* open logs from remote hosts, --merge, pause shortcut (v1.x) ([#16](https://github.com/bhagavan44/LogLens/issues/16)) ([64d40d5](https://github.com/bhagavan44/LogLens/commit/64d40d5489001364d0f92058709901320e9e506a))
+* read NLog, log4net and regular expression formats (v1.x) ([#15](https://github.com/bhagavan44/LogLens/issues/15)) ([61bf4ac](https://github.com/bhagavan44/LogLens/commit/61bf4acce7738d86b6bcc9d0b4bfbb67d0b4a8c6))
+
 ## [1.1.0](https://github.com/bhagavan44/LogLens/compare/v1.0.0...v1.1.0) (2026-11-24)
 
 
