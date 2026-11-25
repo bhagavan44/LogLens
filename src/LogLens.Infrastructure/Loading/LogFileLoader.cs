@@ -29,12 +29,21 @@ public sealed class LogFileLoader
     /// <exception cref="UnauthorizedAccessException">The file can't be read with the current user's rights.</exception>
     /// <exception cref="IOException">The file could not be read.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
-    public async Task<LogDocument> LoadAsync(string path, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+    /// <param name="path">A local or UNC path, or an <c>sftp://</c> location read through <paramref name="fileSystem"/>.</param>
+    /// <param name="progress">Reports the fraction read.</param>
+    /// <param name="cancellationToken">Stops reading.</param>
+    /// <param name="fileSystem">Where the file is read from; the local file system when null. A remote host that drops fails the load.</param>
+    public async Task<LogDocument> LoadAsync(
+        string path,
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default,
+        ILogFileSystem? fileSystem = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         cancellationToken.ThrowIfCancellationRequested();
         var clock = Stopwatch.StartNew();
-        var fullPath = Path.GetFullPath(path);
+        fileSystem ??= LocalLogFileSystem.Instance;
+        var fullPath = fileSystem is LocalLogFileSystem ? Path.GetFullPath(path) : path;
 
         await using var stream = new FileLogStream(fullPath, new StreamOptions
         {
@@ -43,7 +52,7 @@ public sealed class LogFileLoader
             FirstChunkBytes = _chunkBytes,
             UseWatcher = false,
             CompleteAtEndOfInitialLoad = true,
-        });
+        }, fileSystem);
 
         var document = new LogDocument(fullPath, _format);
         progress?.Report(0);

@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using LogLens.Core.Formats;
 using LogLens.Core.Models;
+using LogLens.Core.Remote;
 
 namespace LogLens.Core.Settings;
 
@@ -147,6 +148,9 @@ public sealed record AppSettings
     /// <summary>Named filters that can be recalled from the filter bar (FR-S7).</summary>
     public IReadOnlyList<SavedFilter> SavedFilters { get; init; } = [];
 
+    /// <summary>Hosts listed in File ▸ Open from remote host (FR-O7). No passwords: those are asked for when connecting.</summary>
+    public IReadOnlyList<RemoteHost> RemoteHosts { get; init; } = [];
+
     /// <summary>
     /// The user's own formats (FR-F2): Serilog output templates, NLog layouts, log4net patterns and regular expressions, offered next to the
     /// built-in formats and tried by detection (FR-F1).
@@ -189,6 +193,12 @@ public sealed record AppSettings
             .DistinctBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
             .Take(MaxListLength)
             .ToList(),
+        RemoteHosts = (RemoteHosts ?? [])
+            .Where(h => h is not null && Enum.IsDefined(h.Kind))
+            .Select(h => h.Normalised())
+            .Where(h => h.Validate() is null)
+            .Take(MaxListLength)
+            .ToList(),
     };
 
     /// <summary>These settings with this PC's own part (column layout, first-run hints) taken from <paramref name="other"/>.</summary>
@@ -221,7 +231,8 @@ public sealed record AppSettings
            && HintsSeen == other.HintsSeen
            && SequenceEqual(HideRules, other.HideRules)
            && SequenceEqual(SavedFilters, other.SavedFilters)
-           && SequenceEqual(CustomTemplates, other.CustomTemplates);
+           && SequenceEqual(CustomTemplates, other.CustomTemplates)
+           && SequenceEqual(RemoteHosts, other.RemoteHosts);
 
     public override int GetHashCode()
         => HashCode.Combine(Theme, FontFamily, FontSize, TimestampZone, TimestampFormat, NewestFirst, HideRules?.Count, SavedFilters?.Count);

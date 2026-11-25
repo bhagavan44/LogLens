@@ -40,6 +40,28 @@ public class CommandLineTests
     }
 
     [Theory]
+    [InlineData("--merge", "a.log", "b.log")]
+    [InlineData("a.log", "--MERGE", "b.log")]
+    [InlineData("a.log", "b.log", "--merge")]
+    public void Merge_asks_for_one_merged_view_wherever_it_stands(params string[] args)
+    {
+        var commandLine = CommandLine.Parse(args, WorkingDirectory);
+
+        Assert.True(commandLine.Merge);
+        Assert.Equal([@"C:\work\a.log", @"C:\work\b.log"], commandLine.Files);
+        Assert.False(CommandLine.Parse(["a.log", "b.log"], WorkingDirectory).Merge);
+    }
+
+    [Fact]
+    public void A_handed_over_launch_keeps_merge()
+    {
+        var request = new Instances.LaunchRequest(WorkingDirectory, ["--merge", "a.log", "b.log"]);
+
+        Assert.True(request.Resolve().Merge);
+        Assert.Equal([@"C:\work\a.log", @"C:\work\b.log"], request.ResolvePaths());
+    }
+
+    [Theory]
     [InlineData("--data-dir")]
     [InlineData("--data-dir", "--other")]
     public void Data_dir_without_a_folder_is_empty_rather_than_absent(params string[] args)

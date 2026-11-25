@@ -17,6 +17,9 @@ public enum StreamState
 
     /// <summary>The file has gone (deleted, or renamed away by a log rotator); looking for it again until it is back.</summary>
     WaitingForFile,
+
+    /// <summary>The remote host can't be reached at the moment (FR-O7); trying again until it answers.</summary>
+    Reconnecting,
 }
 
 /// <summary>One unit of work delivered by an <see cref="ILogStream"/>. Batches arrive in order and are applied on the UI thread.</summary>

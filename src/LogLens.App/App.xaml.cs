@@ -1,12 +1,14 @@
 using LogLens.App.Services;
 using LogLens.Core.Diagnostics;
 using LogLens.Core.Formats;
+using LogLens.Core.Remote;
 using LogLens.Core.Settings;
 using LogLens.Core.State;
 using LogLens.Core.Streaming;
 using LogLens.Infrastructure;
 using LogLens.Infrastructure.Diagnostics;
 using LogLens.Infrastructure.Loading;
+using LogLens.Infrastructure.Remote;
 using LogLens.Infrastructure.State;
 using LogLens.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -69,10 +71,10 @@ public partial class App : Application
         var viewModel = window.ViewModel;
         viewModel.RemembersSession = primary;
 
-        // "Open with" / command line: LogLens.exe [--data-dir <folder>] [<log file> ...]; otherwise what was open last time (FR-P3).
+        // "Open with" / command line: LogLens.exe [--data-dir <folder>] [--merge] [<log file> ...]; otherwise what was open last time (FR-P3).
         if (Program.CommandLine.Files.Count > 0)
         {
-            window.Open(Program.CommandLine.Files);
+            window.Open(Program.CommandLine.Files, Program.CommandLine.Merge);
         }
         else if (primary && Services.GetRequiredService<SettingsService>().Current.RestoreSession)
         {
@@ -102,7 +104,30 @@ public partial class App : Application
             var settings = sp.GetRequiredService<SettingsService>();
             return () => settings.Formats; // custom templates take effect for the next file opened
         });
-        services.AddSingleton<ILogStreamFactory>(sp => new FileLogStreamFactory(formats: sp.GetRequiredService<Func<FormatCatalog>>()));
+
+        // Remote hosts (FR-O7): host keys from ~/.ssh/known_hosts (read only) plus the ones accepted in LogLens; one SSH connection per login.
+        var sshFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ssh");
+        services.AddSingleton<IHostKeyTrust>(sp => new HostKeyTrust(
+            sp.GetRequiredService<IStateStore>(),
+            Path.Combine(sshFolder, "known_hosts"),
+            onSaveError: ex => Log.Warning(ex, "Could not save a trusted host key")));
+        services.AddSingleton(sp => new SftpConnections(sp.GetRequiredService<IHostKeyTrust>(), sshFolder, Log));
+        services.AddSingleton<IRemoteConnector>(sp =>
+        {
+            var settings = sp.GetRequiredService<SettingsService>();
+            var prompt = new Views.SshPromptDialogs(
+                () => sp.GetRequiredService<MainWindow>().DialogRoot, // asked only once the window is up
+                () => sp.GetRequiredService<MainWindow>().DialogTheme);
+            return new RemoteConnector(
+                sp.GetRequiredService<SftpConnections>(),
+                () => settings.Current.RemoteHosts.Concat(MainWindow.SshConfigHosts()),
+                prompt,
+                Log);
+        });
+
+        services.AddSingleton<ILogStreamFactory>(sp => new FileLogStreamFactory(
+            formats: sp.GetRequiredService<Func<FormatCatalog>>(),
+            remoteFileSystem: sp.GetRequiredService<SftpConnections>().FileSystemFor));
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();
         return services.BuildServiceProvider();

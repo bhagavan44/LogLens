@@ -4,7 +4,8 @@ Thanks for taking the time to help. Bug reports, ideas, documentation fixes and 
 welcome.
 
 LogLens is an offline, read-only log viewer: it never changes the files it opens, sends no
-telemetry and makes no network calls of its own. Contributions need to keep it that way.
+telemetry and makes no network calls except the read-only SSH/SFTP connections the user starts to
+hosts they chose (NFR-9). Contributions need to keep it that way.
 
 ## Ways to contribute
 

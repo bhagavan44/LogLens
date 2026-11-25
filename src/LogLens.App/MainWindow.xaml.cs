@@ -34,6 +34,8 @@ public sealed partial class MainWindow : Window
     private readonly SettingsService _settings;
     private readonly AppPaths _paths;
     private readonly Serilog.ILogger _log;
+    private readonly Infrastructure.Remote.SftpConnections _remote;
+    private readonly Infrastructure.Remote.IHostKeyTrust _hostKeys;
     private LogViewModel? _observedLog;
     private bool _syncingTabs;
     private string _folderPatterns = FolderScanner.DefaultPatterns;
@@ -41,12 +43,21 @@ public sealed partial class MainWindow : Window
     // What the Time column shows (View ▸ Time column, FR-G5). Not saved: every start shows timestamps again.
     private TimeColumnMode _timeMode = TimeColumnMode.Timestamp;
 
-    public MainWindow(MainViewModel viewModel, SettingsService settings, AppPaths paths, Serilog.ILogger log)
+    public MainWindow(
+        MainViewModel viewModel,
+        SettingsService settings,
+        AppPaths paths,
+        Serilog.ILogger log,
+        Infrastructure.Remote.SftpConnections remote,
+        Infrastructure.Remote.IHostKeyTrust hostKeys)
     {
         ViewModel = viewModel;
         _settings = settings;
         _paths = paths;
         _log = log;
+        _remote = remote;
+        _hostKeys = hostKeys;
+        Closed += (_, _) => _remote.Dispose(); // closes the SSH connections; the passwords held for reconnecting go with them
         InitializeComponent();
 
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
@@ -94,18 +105,18 @@ public sealed partial class MainWindow : Window
 
     private LogView? CurrentView => ViewModel.CurrentLog is { } log && _open.TryGetValue(log, out var open) ? open.View : null;
 
-    /// <summary>Opens files given on the command line or dropped on the window, each in a tab of its own.</summary>
-    public void Open(IReadOnlyList<string> paths) => _ = ViewModel.OpenAsync(paths);
+    /// <summary>Opens files given on the command line or dropped on the window, each in a tab of its own, or as one merged view (<c>--merge</c>).</summary>
+    public void Open(IReadOnlyList<string> paths, bool merge = false) => _ = merge ? ViewModel.OpenMergedAsync(paths) : ViewModel.OpenAsync(paths);
 
     /// <summary>Another start of LogLens handed its command line over (single instance): open its files here and come to the front.</summary>
     public void HandleLaunch(LaunchRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
         BringToFront();
-        var paths = request.ResolvePaths();
-        if (paths.Count > 0)
+        var commandLine = request.Resolve();
+        if (commandLine.Files.Count > 0)
         {
-            Open(paths);
+            Open(commandLine.Files, commandLine.Merge);
         }
     }
 

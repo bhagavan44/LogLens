@@ -6,7 +6,7 @@ public sealed record LogFileInfo(string Path, string Name, long Length, DateTime
 /// <summary>Lists the log files in a folder that match a pattern (Open folder, FR-O3).</summary>
 public static class FolderScanner
 {
-    public const string DefaultPatterns = "*.txt;*.log;*.json;*.clef";
+    public const string DefaultPatterns = Core.Remote.FilePatterns.Default;
 
     /// <summary>More files than this are not listed: a folder with tens of thousands of files is not a log folder.</summary>
     public const int MaxFiles = 5000;

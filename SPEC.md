@@ -19,7 +19,8 @@ in later releases (§8).
 - Make the common questions cheap to answer: *what errors happened, when, and what led up to them?*
 - Show exceptions and (for structured formats) properties clearly, not as an unreadable text blob.
 - Follow logs live while an app is still writing to them.
-- Work fully offline with no telemetry, no services to install and no admin rights.
+- Work fully offline with no telemetry, no services to install and no admin rights (the only network use
+  is reading logs from remote hosts the user connects to, FR-O7).
 
 ### 1.2 Non-goals (v1)
 
@@ -111,6 +112,18 @@ statistics and export work on the common `LogEvent` model and never special-case
   *Source* column.
 - **FR-O5** Files being written by another process open without error (`FileShare.ReadWrite |
   Delete`). The viewer never takes an exclusive lock.
+- **FR-O6** `--merge` on the command line opens the files given as one merged view (FR-O4).
+- **FR-O7** **Remote hosts**: *File ▸ Open from remote host* (Ctrl+Shift+R) lists saved hosts — SSH hosts,
+  read over SFTP, and Windows shares — plus the hosts in `~/.ssh/config`; after connecting, the user browses
+  the host's folders and ticks files to open in tabs or merge. A remote file is identified by
+  `sftp://user@host[:port]/path` wherever a local path goes (tabs, recent files, the session, bookmarks, the
+  command line) and tails, refreshes and bookmarks like a local one; it is polled every second, and a host
+  that stops answering shows *Reconnecting…* until reading resumes where it stopped. Connections are shared
+  per login and re-established quietly with the credentials of the first connect. SSH host keys are checked
+  against `~/.ssh/known_hosts` (read only) and keys accepted in LogLens: an unknown key is shown with its
+  fingerprint and must be accepted, a changed or revoked key is refused before any password is sent.
+  Passwords and key passphrases are kept in memory only and never written. ssh-agent / Pageant, `ProxyJump`
+  and host certificates are not supported.
 
 ### 3.2 Event list
 
@@ -240,7 +253,7 @@ statistics and export work on the common `LogEvent` model and never special-case
 | NFR-6 | Scrolling | Smooth with up to 1 M rows |
 | NFR-7 | Live tail latency | New event visible ≤ 1 s after being flushed |
 | NFR-8 | Robustness | Never crash on malformed input; parse errors contained per line |
-| NFR-9 | Privacy | No telemetry and no network calls; logs never leave the machine |
+| NFR-9 | Privacy | No telemetry, and no network calls except the read-only SSH/SFTP connections the user starts to hosts they chose (FR-O7); logs are never sent anywhere |
 | NFR-10 | Security | Read-only access; regex timeouts; JSON depth / size limits; no code execution from log content |
 | NFR-11 | Installation | Portable self-contained single-file exe, no admin rights |
 | NFR-12 | Diagnostics | The viewer's own log and crash reports in `%LOCALAPPDATA%\LogLens\logs` |
@@ -257,6 +270,7 @@ statistics and export work on the common `LogEvent` model and never special-case
 | Pattern | MVVM with `CommunityToolkit.Mvvm`, DI with `Microsoft.Extensions.DependencyInjection` |
 | Query language | Hand-written lexer / parser compiled to a predicate |
 | Self-diagnostics | Serilog with the file sink |
+| Remote hosts | SSH.NET for SSH/SFTP (FR-O7); Windows shares through the file system |
 | Tests | xUnit with plain `Assert` |
 | Packaging | Unpackaged, self-contained, single-file exe (x64 and Arm64); signed MSIX + winget later |
 
@@ -369,4 +383,4 @@ Each release is usable on its own and is published on GitHub with a portable exe
 - [ ] Export of the filtered set produces valid CSV / JSON / HTML.
 - [ ] Light / dark themes, DPI scaling and keyboard-only operation verified.
 - [ ] The portable exe runs on a clean Windows 10 1809+ and Windows 11 machine without admin rights.
-- [ ] No network traffic and no file modified.
+- [ ] No network traffic (unless a remote host is opened, FR-O7) and no file modified.

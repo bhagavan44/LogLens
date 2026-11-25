@@ -26,13 +26,14 @@
                     Style="{StaticResource SubtitleTextBlockStyle}"
                     HorizontalAlignment="Center" />
                 <TextBlock
-                    Text="or open them with the buttons below (Ctrl+O, Ctrl+Shift+O). Each file opens in a tab, or merge several into one view. LogLens reads files written with Serilog's default text template, and never changes them."
+                    Text="or open them with the buttons below (Ctrl+O, Ctrl+Shift+O, Ctrl+Shift+R for a remote host). Each file opens in a tab, or merge several into one view. LogLens reads logs written by Serilog, NLog and log4net, and never changes them."
                     TextWrapping="Wrap"
                     TextAlignment="Center"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" Margin="0,8,0,0">
                     <Button Content="Open files…" Style="{StaticResource AccentButtonStyle}" Click="OnOpenClick" />
                     <Button Content="Open folder…" Click="OnOpenFolderClick" />
+                    <Button Content="Remote host…" Click="OnOpenRemoteClick" ToolTipService.ToolTip="Open logs from an SSH host or a Windows share (Ctrl+Shift+R)" />
                 </StackPanel>
 
                 <!-- UX-2: recent files, newest first. -->

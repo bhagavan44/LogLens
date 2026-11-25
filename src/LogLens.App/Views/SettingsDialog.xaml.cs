@@ -403,7 +403,7 @@ public sealed partial class SettingsDialog : ContentDialog
         {
             AssociationStatus.Registered => $"Registered for {string.Join(", ", registered)}.",
             AssociationStatus.RegisteredElsewhere => $"Registered for {string.Join(", ", registered)}, but for a copy of LogLens in another place ({_associations.RegisteredExePath()}). Press Register to use this one ({ExePath}).",
-            _ => "Not registered. .clef and .json files are read from a later version on; until then they show as unparsed lines.",
+            _ => "Not registered.",
         };
     }
 

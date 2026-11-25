@@ -15,10 +15,10 @@ internal sealed class StreamHarness : IAsyncDisposable
     private readonly CancellationTokenSource _cts = new();
     private Task? _pump;
 
-    public StreamHarness(string path, StreamOptions? options = null)
+    public StreamHarness(string path, StreamOptions? options = null, ILogFileSystem? fileSystem = null)
     {
-        Stream = new FileLogStream(path, options ?? Fast());
-        Doc = new LogDocument(Path.GetFullPath(path), LogFormats.SerilogText);
+        Stream = new FileLogStream(path, options ?? Fast(), fileSystem);
+        Doc = new LogDocument(fileSystem is null ? Path.GetFullPath(path) : path, LogFormats.SerilogText);
     }
 
     public FileLogStream Stream { get; }

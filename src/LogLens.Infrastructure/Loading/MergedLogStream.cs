@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using LogLens.Core.Formats;
 using LogLens.Core.Merging;
 using LogLens.Core.Models;
+using LogLens.Core.Remote;
 using LogLens.Core.Streaming;
 
 namespace LogLens.Infrastructure.Loading;
@@ -16,13 +17,16 @@ public sealed class MergedLogStream : ILogStream
 
     private readonly IReadOnlyList<string> _paths;
     private readonly LogFileLoader _loader;
+    private readonly Func<string, ILogFileSystem> _fileSystemFor;
 
     /// <param name="paths">The files, in the order ties are broken; duplicates are ignored.</param>
     /// <param name="format">The format of every file; null detects each file's format among the built-in ones (FR-F1).</param>
-    public MergedLogStream(IReadOnlyList<string> paths, ILogFormat? format = null)
+    /// <param name="fileSystemFor">Where each file is read from (its SSH host for an <c>sftp://</c> file); the local file system when null.</param>
+    public MergedLogStream(IReadOnlyList<string> paths, ILogFormat? format = null, Func<string, ILogFileSystem>? fileSystemFor = null)
     {
         ArgumentNullException.ThrowIfNull(paths);
-        _paths = paths.Where(p => !string.IsNullOrWhiteSpace(p)).Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        _fileSystemFor = fileSystemFor ?? (_ => LocalLogFileSystem.Instance);
+        _paths = paths.Where(p => !string.IsNullOrWhiteSpace(p)).Select(RemoteLocation.Normalise).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (_paths.Count == 0)
         {
             throw new ArgumentException("Choose at least one file to merge.", nameof(paths));
@@ -75,7 +79,7 @@ public sealed class MergedLogStream : ILogStream
             await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                return await _loader.LoadAsync(path, cancellationToken: cancellationToken).ConfigureAwait(false);
+                return await _loader.LoadAsync(path, cancellationToken: cancellationToken, fileSystem: _fileSystemFor(path)).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException or NotSupportedException)
             {

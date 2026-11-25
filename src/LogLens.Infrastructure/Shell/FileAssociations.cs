@@ -32,10 +32,9 @@ public sealed class FileAssociations
     public static readonly IReadOnlyList<string> KnownExtensions = [".log", ".clef", ".txt", ".json"];
 
     /// <summary>
-    /// Ticked until the user chooses: <c>.log</c> only. <c>.txt</c> and <c>.json</c> are too general to claim, and <c>.clef</c> files are read
-    /// from v1.x on (SPEC §8).
+    /// Ticked until the user chooses (FR-P5): <c>.log</c> and <c>.clef</c>. <c>.txt</c> and <c>.json</c> are too general to claim.
     /// </summary>
-    public static readonly IReadOnlyList<string> DefaultExtensions = [".log"];
+    public static readonly IReadOnlyList<string> DefaultExtensions = [".log", ".clef"];
 
     private readonly RegistryKey _root;
     private readonly string _classesPath;

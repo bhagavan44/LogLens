@@ -17,6 +17,9 @@ public sealed partial class EmptyStateView : UserControl
     /// <summary>Open folder was clicked (FR-O3).</summary>
     public event EventHandler? OpenFolderRequested;
 
+    /// <summary>Remote host was clicked (FR-O7).</summary>
+    public event EventHandler? OpenRemoteRequested;
+
     /// <summary>A recent file was clicked; carries its path.</summary>
     public event EventHandler<string>? RecentFileRequested;
 
@@ -47,4 +50,6 @@ public sealed partial class EmptyStateView : UserControl
     private void OnOpenClick(object sender, RoutedEventArgs e) => OpenRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnOpenFolderClick(object sender, RoutedEventArgs e) => OpenFolderRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnOpenRemoteClick(object sender, RoutedEventArgs e) => OpenRemoteRequested?.Invoke(this, EventArgs.Empty);
 }

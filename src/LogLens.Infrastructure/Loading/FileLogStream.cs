@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Channels;
 using LogLens.Core.Formats;
+using LogLens.Core.Remote;
 using LogLens.Core.Streaming;
 
 namespace LogLens.Infrastructure.Loading;
@@ -27,22 +28,54 @@ public sealed record StreamOptions
     /// <summary>Use a <see cref="FileSystemWatcher"/> to notice changes sooner than the next poll.</summary>
     public bool UseWatcher { get; init; } = true;
 
+    /// <summary>Shortest time between two looks for the next file of a rolling log while following. Zero looks on every poll; remote folders are listed less often.</summary>
+    public TimeSpan RollCheckInterval { get; init; } = TimeSpan.Zero;
+
+    /// <summary>How long to wait before trying an unreachable remote host again (FR-O7).</summary>
+    public TimeSpan ReconnectDelay { get; init; } = TimeSpan.FromSeconds(3);
+
     /// <summary>Batch mode (<see cref="LogFileLoader"/>): once the existing content is read, make everything final and end the stream.</summary>
     public bool CompleteAtEndOfInitialLoad { get; init; }
+
+    /// <summary>
+    /// The options for a file on an SSH host: polled every second (SFTP has no change events) and its folder listed for the next file of a rolling
+    /// log at most every 10 s.
+    /// </summary>
+    public StreamOptions ForRemote() => this with
+    {
+        UseWatcher = false,
+        PollInterval = TimeSpan.FromSeconds(1),
+        RollCheckInterval = TimeSpan.FromSeconds(10),
+    };
 }
 
-/// <summary>Opens <see cref="FileLogStream"/>s on local files and Windows shares.</summary>
+/// <summary>Opens <see cref="FileLogStream"/>s on local files, Windows shares and (once their host is connected) <c>sftp://</c> files.</summary>
 /// <param name="options">How files are read; its <see cref="StreamOptions.Format"/> is used when no format is given and there is no catalog.</param>
 /// <param name="formats">
 /// The formats in force (built-in plus custom templates, which can change while the app runs); when given, a file opened without a format has
 /// it detected among them (FR-F1).
 /// </param>
-public sealed class FileLogStreamFactory(StreamOptions? options = null, Func<FormatCatalog>? formats = null) : ILogStreamFactory
+/// <param name="remoteFileSystem">Reads an <c>sftp://</c> file through its host's connection, or null when that host isn't connected (FR-O7).</param>
+public sealed class FileLogStreamFactory(
+    StreamOptions? options = null,
+    Func<FormatCatalog>? formats = null,
+    Func<string, ILogFileSystem?>? remoteFileSystem = null) : ILogStreamFactory
 {
     public ILogStream Open(string path, ILogFormat? format = null)
-        => new FileLogStream(path, (options ?? new StreamOptions()) with { Format = FormatFor(format) });
+    {
+        var fileSystem = FileSystemFor(path);
+        var streamOptions = (options ?? new StreamOptions()) with { Format = FormatFor(format) };
+        return new FileLogStream(path, fileSystem is LocalLogFileSystem ? streamOptions : streamOptions.ForRemote(), fileSystem);
+    }
 
-    public ILogStream OpenMerged(IReadOnlyList<string> paths, ILogFormat? format = null) => new MergedLogStream(paths, FormatFor(format));
+    public ILogStream OpenMerged(IReadOnlyList<string> paths, ILogFormat? format = null) => new MergedLogStream(paths, FormatFor(format), FileSystemFor);
+
+    /// <summary>Local files and shares are read by Windows; an <c>sftp://</c> file needs its host connected first.</summary>
+    /// <exception cref="RemoteUnavailableException">The file's host isn't connected.</exception>
+    private ILogFileSystem FileSystemFor(string path)
+        => !RemoteLocation.IsRemote(path)
+            ? LocalLogFileSystem.Instance
+            : remoteFileSystem?.Invoke(path) ?? throw new RemoteUnavailableException($"Not connected to the host of {RemoteLocation.FileName(path)}.");
 
     private ILogFormat FormatFor(ILogFormat? format)
         => format ?? (formats is not null ? new AutoDetectFormat(formats()) : options?.Format ?? LogFormats.Default);
@@ -51,14 +84,15 @@ public sealed class FileLogStreamFactory(StreamOptions? options = null, Func<For
 /// <summary>
 /// Reads a log file in chunks and, while <see cref="Follow"/> is on, keeps following it (SPEC §6.3). The file is opened with
 /// <c>FileShare.ReadWrite | FileShare.Delete</c> for each read and closed again, so the app writing it — or a log rotator — is never blocked
-/// (FR-O5); the viewer only reads.
+/// (FR-O5); the viewer only reads. The file can be local (or on a share) or on an SSH host: an <see cref="ILogFileSystem"/> does the reading.
 /// </summary>
 /// <remarks>
 /// Reads the existing content in growing chunks; then, while following, wakes on file-system events or every poll interval and delivers what
 /// was appended (FR-T1). A shorter file, or one whose first bytes changed, was truncated or replaced: reported with a <see cref="ResetBatch"/>
 /// and read again (FR-T3). With <see cref="FollowRolled"/> it moves on to the next file of a rolling log (<see cref="RollPattern"/>) once the
 /// current one is drained. An unfinished last line is held back until its newline arrives (FR-T6), or shown once the file has been quiet
-/// for <see cref="StreamOptions.QuiescenceDelay"/>. All work runs on the thread pool.
+/// for <see cref="StreamOptions.QuiescenceDelay"/>. A remote host that can't be reached shows <see cref="StreamState.Reconnecting"/> and is tried
+/// again every <see cref="StreamOptions.ReconnectDelay"/>; reading resumes where it stopped (FR-O7). All work runs on the thread pool.
 /// </remarks>
 public sealed class FileLogStream : ILogStream
 {
@@ -66,16 +100,21 @@ public sealed class FileLogStream : ILogStream
 
     private readonly string _path;
     private readonly StreamOptions _options;
+    private readonly ILogFileSystem _fs;
     private readonly SemaphoreSlim _wake = new(0);
     private CancellationTokenSource? _cts;
     private volatile bool _follow;
     private volatile bool _followRolled = true;
     private volatile bool _disposed;
 
-    public FileLogStream(string path, StreamOptions? options = null)
+    /// <param name="path">A local or UNC path, or an <c>sftp://</c> location read through <paramref name="fileSystem"/>.</param>
+    /// <param name="options">How the file is read.</param>
+    /// <param name="fileSystem">Where the file is read from; the local file system when null.</param>
+    public FileLogStream(string path, StreamOptions? options = null, ILogFileSystem? fileSystem = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        _path = Path.GetFullPath(path);
+        _fs = fileSystem ?? LocalLogFileSystem.Instance;
+        _path = _fs is LocalLogFileSystem ? Path.GetFullPath(path) : path;
         _options = options ?? new StreamOptions();
     }
 
@@ -177,10 +216,11 @@ public sealed class FileLogStream : ILogStream
     {
         async ValueTask Emit(StreamBatch batch) => await output.WriteAsync(batch, cancellationToken).ConfigureAwait(false);
 
-        using var watcher = _options.UseWatcher && !_options.CompleteAtEndOfInitialLoad ? CreateWatcher() : null;
-        var reader = new Reader(_path, _options, parser: null);
+        using var watcher = _options.UseWatcher && _fs.SupportsWatching && !_options.CompleteAtEndOfInitialLoad ? CreateWatcher() : null;
+        var reader = new Reader(_fs, _path, _options, parser: null);
         var everExisted = false;
         var waitingReported = false;
+        var unavailable = false;
         var previewed = false;
         DateTime? previewDue = null;
 
@@ -189,10 +229,34 @@ public sealed class FileLogStream : ILogStream
         while (!_disposed)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var step = reader.Step(cancellationToken);
+            StepResult step;
+            try
+            {
+                step = reader.Step(cancellationToken);
+            }
+            catch (RemoteUnavailableException ex) when (!_options.CompleteAtEndOfInitialLoad) // a batch load (merge) fails instead of waiting
+            {
+                step = new StepResult(StepKind.Unavailable, Reason: ex.Message);
+            }
+
+            if (unavailable && step.Kind != StepKind.Unavailable)
+            {
+                unavailable = false; // reachable again: say what the stream is doing now
+                await Emit(new StatusBatch(!reader.InitialDone ? StreamState.Loading : _follow ? StreamState.Following : StreamState.Idle));
+            }
 
             switch (step.Kind)
             {
+                case StepKind.Unavailable:
+                    if (!unavailable)
+                    {
+                        unavailable = true;
+                        await Emit(new StatusBatch(StreamState.Reconnecting, step.Reason));
+                    }
+
+                    await WaitAsync(_options.ReconnectDelay, cancellationToken).ConfigureAwait(false);
+                    continue;
+
                 case StepKind.Missing:
                     if (!everExisted && !reader.InitialDone)
                     {
@@ -202,7 +266,7 @@ public sealed class FileLogStream : ILogStream
                     if (!waitingReported)
                     {
                         waitingReported = true;
-                        await Emit(new StatusBatch(StreamState.WaitingForFile, $"Waiting for {Path.GetFileName(reader.Path)}…"));
+                        await Emit(new StatusBatch(StreamState.WaitingForFile, $"Waiting for {FileName(reader.Path)}…"));
                     }
 
                     break;
@@ -211,7 +275,7 @@ public sealed class FileLogStream : ILogStream
                     everExisted = true;
                     waitingReported = false;
                     await Emit(new ResetBatch(step.Reason!));
-                    reader = new Reader(reader.Path, _options, parser: null);
+                    reader = new Reader(_fs, reader.Path, _options, parser: null);
                     previewed = false;
                     previewDue = null;
                     await Emit(new StatusBatch(StreamState.Loading));
@@ -300,6 +364,8 @@ public sealed class FileLogStream : ILogStream
         }
     }
 
+    private static string FileName(string path) => RemoteLocation.IsRemote(path) ? RemoteLocation.FileName(path) : Path.GetFileName(path);
+
     private TimeSpan? NextWait(DateTime? previewDue)
     {
         TimeSpan? wait = _follow ? _options.PollInterval : null;
@@ -382,13 +448,14 @@ public sealed class FileLogStream : ILogStream
 
     // ------------------------------------------------------------------ reading one file
 
-    private enum StepKind { NoData, Data, Marker, Reset, Missing }
+    private enum StepKind { NoData, Data, Marker, Reset, Missing, Unavailable }
 
     private readonly record struct StepResult(StepKind Kind, ChunkBatch? Batch = null, bool More = false, string? Reason = null, Exception? Error = null);
 
     /// <summary>The state of reading one file: where we are, how to decode it, and its parser.</summary>
     private sealed class Reader
     {
+        private readonly ILogFileSystem _fs;
         private readonly StreamOptions _options;
         private readonly byte[] _buffer;
         private readonly string? _pattern;
@@ -397,9 +464,11 @@ public sealed class FileLogStream : ILogStream
         private long _position;
         private int _nextChunk;
         private byte[] _headSignature = [];
+        private DateTime _lastRollCheck = DateTime.MinValue;
 
-        public Reader(string path, StreamOptions options, ILogParser? parser, bool continuing = false, ILogFormat? format = null)
+        public Reader(ILogFileSystem fs, string path, StreamOptions options, ILogParser? parser, bool continuing = false, ILogFormat? format = null)
         {
+            _fs = fs;
             _format = format ?? options.Format;
             Path = path;
             _options = options;
@@ -407,7 +476,7 @@ public sealed class FileLogStream : ILogStream
             _nextChunk = Math.Clamp(options.FirstChunkBytes, 4, _buffer.Length);
             Parser = parser ?? options.Format.CreateParser(path);
             InitialDone = continuing;
-            _pattern = RollPattern.FromFileName(System.IO.Path.GetFileName(path));
+            _pattern = RollPattern.FromFileName(FileName(path));
         }
 
         public string Path { get; }
@@ -424,16 +493,16 @@ public sealed class FileLogStream : ILogStream
 
         public StepResult Step(CancellationToken cancellationToken)
         {
-            FileStream stream;
+            Stream stream;
             try
             {
-                stream = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 1, FileOptions.SequentialScan);
+                stream = _fs.OpenRead(Path);
             }
             catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
             {
                 return new StepResult(StepKind.Missing, Error: ex);
             }
-            catch (IOException) when (_decoder is not null)
+            catch (IOException ex) when (_decoder is not null && ex is not RemoteUnavailableException)
             {
                 return new StepResult(StepKind.NoData); // briefly locked or mid-rotation: try again next time
             }
@@ -477,6 +546,8 @@ public sealed class FileLogStream : ILogStream
                     read += got;
                 }
 
+                // All reading is done before anything is committed: a remote read that fails here leaves the reader as it was, so the same
+                // chunk is simply read again once the host is back.
                 CaptureHeadSignature(stream, length);
                 var lengthNow = stream.Length;
 
@@ -529,18 +600,24 @@ public sealed class FileLogStream : ILogStream
                 return false;
             }
 
+            var now = DateTime.UtcNow;
+            if (_options.RollCheckInterval > TimeSpan.Zero && now - _lastRollCheck < _options.RollCheckInterval)
+            {
+                return false;
+            }
+
+            _lastRollCheck = now;
             try
             {
-                var directory = System.IO.Path.GetDirectoryName(Path)!;
-                var candidates = Directory.EnumerateFiles(directory, _pattern)
-                    .Select(f => new RollCandidate(System.IO.Path.GetFileName(f), File.GetCreationTimeUtc(f)));
-                var next = RollPattern.PickSuccessor(_pattern, System.IO.Path.GetFileName(Path), File.GetCreationTimeUtc(Path), candidates);
+                var directory = _fs.GetFolder(Path)!;
+                var candidates = _fs.ListFiles(directory).Where(c => RollPattern.Matches(_pattern, c.Name)).ToList();
+                var next = RollPattern.PickSuccessor(_pattern, FileName(Path), _fs.GetCreatedUtc(Path), candidates);
                 if (next is null)
                 {
                     return false;
                 }
 
-                nextPath = System.IO.Path.Combine(directory, next);
+                nextPath = _fs.Combine(directory, next);
                 return true;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -556,10 +633,10 @@ public sealed class FileLogStream : ILogStream
         public Reader SwitchTo(string nextPath)
         {
             var format = ParsedFormat ?? _options.Format;
-            return new(nextPath, _options, format.CreateParser(nextPath, Parser.EndOffset, Parser.CommittedId), continuing: true, format);
+            return new(_fs, nextPath, _options, format.CreateParser(nextPath, Parser.EndOffset, Parser.CommittedId), continuing: true, format);
         }
 
-        private void Initialise(FileStream stream)
+        private void Initialise(Stream stream)
         {
             var head = new byte[4];
             var (encoding, preamble, name) = TextEncodings.Detect(head.AsSpan(0, ReadAt(stream, 0, head)));
@@ -570,7 +647,7 @@ public sealed class FileLogStream : ILogStream
 
         // ---- truncation / replacement detection ----
 
-        private bool HeadMatches(FileStream stream)
+        private bool HeadMatches(Stream stream)
         {
             if (_headSignature.Length == 0)
             {
@@ -581,7 +658,7 @@ public sealed class FileLogStream : ILogStream
             return ReadAt(stream, 0, current) == _headSignature.Length && current.AsSpan().SequenceEqual(_headSignature);
         }
 
-        private void CaptureHeadSignature(FileStream stream, long length)
+        private void CaptureHeadSignature(Stream stream, long length)
         {
             var wanted = (int)Math.Min(HeadSignatureBytes, length);
             if (wanted <= _headSignature.Length)
@@ -597,7 +674,7 @@ public sealed class FileLogStream : ILogStream
             }
         }
 
-        private static int ReadAt(FileStream stream, long position, byte[] buffer)
+        private static int ReadAt(Stream stream, long position, byte[] buffer)
         {
             stream.Seek(position, SeekOrigin.Begin);
             var total = 0;
