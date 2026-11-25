@@ -18,6 +18,9 @@ public sealed class JsonStateStore(AppPaths paths) : IStateStore
             RecentFiles = state.RecentFiles ?? [],
             Session = state.Session is { } session ? session with { Tabs = session.Tabs ?? [] } : new SessionState(),
             Bookmarks = state.Bookmarks ?? [],
+            TrustedHostKeys = (state.TrustedHostKeys ?? [])
+                .Where(k => k is not null && !string.IsNullOrWhiteSpace(k.Host) && !string.IsNullOrWhiteSpace(k.Key))
+                .ToList(),
         };
     }
 

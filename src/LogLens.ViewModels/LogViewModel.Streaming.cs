@@ -84,11 +84,16 @@ public sealed partial class LogViewModel : IDisposable
     /// <summary>Events received but not shown yet (paused, or waiting for a background pass).</summary>
     public int BufferedNewEvents => _queue.Count == 0 ? 0 : Math.Max(0, _queuedHighWater - Document.Events.Count);
 
-    /// <summary>Short live state next to the Tail button: "Loading 45 %", "● Live", "Paused — 12 new", "Waiting for app.log…".</summary>
+    /// <summary>Short live state next to the Tail button: "Loading 45 %", "● Live", "Paused — 12 new", "Waiting for app.log…", "Reconnecting…".</summary>
     public string TailStatus
     {
         get
         {
+            if (_streamState == StreamState.Reconnecting && !IsStopped)
+            {
+                return "Reconnecting…"; // a remote host stopped answering (FR-O7); reading resumes where it was
+            }
+
             if (IsLoading)
             {
                 return string.Create(CultureInfo.InvariantCulture, $"Loading {LoadProgress:P0}");

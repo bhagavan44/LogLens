@@ -17,6 +17,21 @@ public sealed record AppState
 
     /// <summary>Bookmarked events of every file, in the order they were added (FR-N1).</summary>
     public IReadOnlyList<Bookmark> Bookmarks { get; init; } = [];
+
+    /// <summary>SSH host keys the user chose to trust in LogLens (FR-O7), next to <c>~/.ssh/known_hosts</c>, which is only read.</summary>
+    public IReadOnlyList<TrustedHostKey> TrustedHostKeys { get; init; } = [];
+}
+
+/// <summary>An SSH host key the user accepted: <see cref="Host"/> is written as in <c>known_hosts</c> (<c>host</c>, or <c>[host]:port</c>).</summary>
+public sealed record TrustedHostKey
+{
+    public string Host { get; init; } = string.Empty;
+
+    /// <summary>The key's algorithm, e.g. <c>ssh-ed25519</c>.</summary>
+    public string KeyType { get; init; } = string.Empty;
+
+    /// <summary>The public key, base64 (the same text as in <c>known_hosts</c>).</summary>
+    public string Key { get; init; } = string.Empty;
 }
 
 /// <summary>The open tabs in order and which one was in front.</summary>

@@ -15,6 +15,11 @@
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
   </ItemGroup>
 
+  <!-- Remote hosts over SSH/SFTP (FR-O7). -->
+  <ItemGroup>
+    <PackageReference Include="SSH.NET" Version="2026.0.1" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\LogLens.Core\LogLens.Core.csproj" />
   </ItemGroup>

@@ -258,6 +258,7 @@ public class SettingsModelTests
             [nameof(AppSettings.HideRules)] = new() { HideRules = [new HideRule { Query = "@m = 'x'" }] },
             [nameof(AppSettings.SavedFilters)] = new() { SavedFilters = [new SavedFilter { Name = "n" }] },
             [nameof(AppSettings.CustomTemplates)] = new() { CustomTemplates = [new CustomTemplate("n", "{Timestamp} {Level} {Message}")] },
+            [nameof(AppSettings.RemoteHosts)] = new() { RemoteHosts = [new Remote.RemoteHost { Address = "web01", UserName = "deploy" }] },
         };
 
         var settable = typeof(AppSettings).GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanWrite).Select(p => p.Name);

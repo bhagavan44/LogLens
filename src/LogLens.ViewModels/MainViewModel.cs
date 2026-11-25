@@ -3,6 +3,7 @@ using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LogLens.Core.Formats;
 using LogLens.Core.Models;
+using LogLens.Core.Remote;
 using LogLens.Core.State;
 using LogLens.Core.Streaming;
 
@@ -35,6 +36,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly SessionService _session;
     private readonly BookmarkService _bookmarks;
     private readonly Func<FormatCatalog> _formats;
+    private readonly IRemoteConnector? _remote;
     private readonly Dictionary<LogViewModel, string> _pending = [];
     private CancellationTokenSource? _loadCancellation;
     private bool _restoring;
@@ -44,9 +46,17 @@ public sealed partial class MainViewModel : ObservableObject
     /// <param name="session">The tabs reopened on the next start.</param>
     /// <param name="bookmarks">Bookmarks of every file.</param>
     /// <param name="formats">The formats in force (built-in plus custom templates); the built-in ones when null.</param>
-    public MainViewModel(ILogStreamFactory streams, RecentFilesService recent, SessionService session, BookmarkService bookmarks, Func<FormatCatalog>? formats = null)
+    /// <param name="remote">Connects to the host of an <c>sftp://</c> file before it opens (FR-O7); without it such files can't be opened.</param>
+    public MainViewModel(
+        ILogStreamFactory streams,
+        RecentFilesService recent,
+        SessionService session,
+        BookmarkService bookmarks,
+        Func<FormatCatalog>? formats = null,
+        IRemoteConnector? remote = null)
     {
         _formats = formats ?? (() => FormatCatalog.BuiltIn);
+        _remote = remote;
         _streams = streams ?? throw new ArgumentNullException(nameof(streams));
         _recent = recent ?? throw new ArgumentNullException(nameof(recent));
         _session = session ?? throw new ArgumentNullException(nameof(session));
@@ -249,9 +259,49 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>
     /// Opens one tab: a file (<paramref name="path"/>) or a merged view (<paramref name="mergedFiles"/>), read with <paramref name="format"/> or,
     /// when null, with the format detected from each file's first lines. Completes with the new log once it shows, or with null when it failed
-    /// or was cancelled before that.
+    /// or was cancelled before that. The hosts of remote files are connected first, which may ask the user questions (FR-O7).
     /// </summary>
-    private Task<LogViewModel?> OpenTabAsync(string? path, IReadOnlyList<string>? mergedFiles, bool follow, CancellationToken token, ILogFormat? format = null)
+    private async Task<LogViewModel?> OpenTabAsync(string? path, IReadOnlyList<string>? mergedFiles, bool follow, CancellationToken token, ILogFormat? format = null)
+    {
+        if (!await ConnectRemoteHostsAsync(path is null ? mergedFiles! : [path], token))
+        {
+            return null;
+        }
+
+        return await StartTabAsync(path, mergedFiles, follow, token, format);
+    }
+
+    /// <summary>
+    /// Connects to the host of every remote file among <paramref name="files"/>, one host at a time. False when one couldn't be connected or the
+    /// user cancelled; the notice says so.
+    /// </summary>
+    private async Task<bool> ConnectRemoteHostsAsync(IReadOnlyList<string> files, CancellationToken token)
+    {
+        if (_remote is null)
+        {
+            return true; // opening fails with "not connected", as for any unreadable file
+        }
+
+        var remoteFiles = files.Where(RemoteLocation.IsRemote).DistinctBy(f => RemoteLocation.TryParse(f, out var l) ? l.ConnectionKey : f);
+        foreach (var file in remoteFiles)
+        {
+            var result = await _remote.ConnectAsync(file, token);
+            if (result.Connected)
+            {
+                continue;
+            }
+
+            var host = RemoteLocation.TryParse(file, out var location) ? location.Host : file;
+            Notice = result.Cancelled
+                ? new Notice(NoticeSeverity.Informational, $"Not connected to {host}", $"{Path.GetFileName(file)} was not opened.")
+                : new Notice(NoticeSeverity.Error, $"Couldn't connect to {host}", result.Problem ?? "The host could not be reached.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private Task<LogViewModel?> StartTabAsync(string? path, IReadOnlyList<string>? mergedFiles, bool follow, CancellationToken token, ILogFormat? format)
     {
         if (token.IsCancellationRequested)
         {

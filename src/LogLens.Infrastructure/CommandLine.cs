@@ -58,6 +58,11 @@ public sealed record CommandLine(IReadOnlyList<string> Files, string? DataDir, b
 
     private static string ToFullPath(string path, string workingDirectory)
     {
+        if (Core.Remote.RemoteLocation.IsRemote(path))
+        {
+            return path; // sftp://user@host/path is not relative to anything (FR-O7)
+        }
+
         try
         {
             return Path.GetFullPath(path, workingDirectory);
