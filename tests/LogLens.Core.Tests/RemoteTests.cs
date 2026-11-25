@@ -149,6 +149,41 @@ public sealed class RemoteHostTests
         Assert.False(host.Serves(new RemoteLocation("deploy", "web01", 22, "/x")));
         Assert.False(host.Serves(new RemoteLocation("root", "web01", 2222, "/x")));
     }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("  ", true)]
+    [InlineData("PROD", true)] // name, ignoring case
+    [InlineData("web01", true)] // address
+    [InlineData("deploy", true)] // user
+    [InlineData("2222", true)] // port
+    [InlineData("deploy@web01", true)] // summary
+    [InlineData("prod deploy", true)] // every word, each anywhere
+    [InlineData("prod root", false)]
+    [InlineData("staging", false)]
+    public void Matches_a_filter_on_any_field(string? filter, bool matches)
+        => Assert.Equal(matches, (Ssh() with { Name = "Prod web", Port = 2222 }).Matches(filter));
+
+    [Fact]
+    public void A_share_matches_its_path_but_not_its_unused_ssh_fields()
+    {
+        var share = new RemoteHost { Kind = RemoteHostKind.WindowsShare, Name = "File server", Address = @"\\srv\logs" };
+        Assert.True(share.Matches(@"srv\logs"));
+        Assert.True(share.Matches("file"));
+        Assert.False(share.Matches("22"));
+    }
+
+    [Fact]
+    public void Duplicate_keeps_the_details_under_a_free_name()
+    {
+        var host = Ssh() with { Name = "Prod", Port = 2222, KeyFile = @"C:\keys\id", StartFolder = "/var/log" };
+
+        var copy = host.Duplicate(["Prod"]);
+        Assert.Equal(host with { Name = "Prod (copy)" }, copy);
+
+        Assert.Equal("Prod (copy 3)", host.Duplicate(["Prod", "prod (COPY)", "Prod (copy 2)"]).Name);
+        Assert.Equal("web01 (copy)", Ssh().Duplicate([]).Name); // unnamed: from the address
+    }
 }
 
 public sealed class FilePatternsTests

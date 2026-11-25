@@ -114,7 +114,8 @@ statistics and export work on the common `LogEvent` model and never special-case
   Delete`). The viewer never takes an exclusive lock.
 - **FR-O6** `--merge` on the command line opens the files given as one merged view (FR-O4).
 - **FR-O7** **Remote hosts**: *File ▸ Open from remote host* (Ctrl+Shift+R) lists saved hosts — SSH hosts,
-  read over SFTP, and Windows shares — plus the hosts in `~/.ssh/config`; after connecting, the user browses
+  read over SFTP, and Windows shares — plus the hosts in `~/.ssh/config`, with a filter on name, address,
+  user and port, and *Duplicate* to add a host from another's details; after connecting, the user browses
   the host's folders and ticks files to open in tabs or merge. A remote file is identified by
   `sftp://user@host[:port]/path` wherever a local path goes (tabs, recent files, the session, bookmarks, the
   command line) and tails, refreshes and bookmarks like a local one; it is polled every second, and a host
