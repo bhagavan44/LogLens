@@ -1,5 +1,6 @@
 using LogLens.Core.Formats;
 using LogLens.Core.Formats.SerilogText;
+using LogLens.Core.Formats.Text;
 using LogLens.Core.Models;
 
 namespace LogLens.Core.Tests;
@@ -58,7 +59,7 @@ public class SerilogTextFormatTests
     [Fact]
     public void A_partial_last_line_is_held_back_until_its_newline_arrives()
     {
-        var parser = new SerilogTextParser();
+        var parser = new TextLogParser();
 
         var first = parser.Append("2026-11-13 08:00:00.012 +05:30 [INF] one\n2026-11-13 08:00:01.000 +05:30 [ERR] tw");
 

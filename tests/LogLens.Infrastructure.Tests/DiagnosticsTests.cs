@@ -35,7 +35,7 @@ public sealed class DiagnosticsTests : IDisposable
         (log as IDisposable)?.Dispose();
 
         var file = Assert.Single(Directory.GetFiles(Paths.LogDirectory, "loglens-*.txt"));
-        var parsed = new Core.Formats.SerilogText.PlainTextLogParser().Parse(File.ReadAllText(file));
+        var parsed = new Core.Formats.Text.PlainTextLogParser().Parse(File.ReadAllText(file));
 
         Assert.Equal(0, parsed.UnparsedCount);
         Assert.Equal([Core.Models.LogLevel.Information, Core.Models.LogLevel.Error], parsed.Events.Select(e => e.Level));

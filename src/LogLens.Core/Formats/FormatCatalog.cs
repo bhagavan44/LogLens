@@ -122,7 +122,7 @@ public sealed class FormatCatalog
             return "Paste the first line of an event to see what the template reads from it.";
         }
 
-        var parser = new SerilogTextParser(compiled);
+        var parser = new Text.TextLogParser(compiled!.Pattern);
         var events = parser.Append(line.TrimEnd('\r', '\n') + "\n").Events.Concat(parser.Complete().Events).ToList();
         var e = events.LastOrDefault();
         if (e is null || e.IsUnparsed)

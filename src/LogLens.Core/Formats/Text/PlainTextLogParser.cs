@@ -1,19 +1,19 @@
 using System.Text.RegularExpressions;
 using LogLens.Core.Models;
 
-namespace LogLens.Core.Formats.SerilogText;
+namespace LogLens.Core.Formats.Text;
 
 /// <summary>Result of parsing a whole file.</summary>
 public sealed record ParseResult(LogEvent[] Events, int UnparsedCount);
 
 /// <summary>
-/// Parses plain-text Serilog files written with an <see cref="OutputTemplate"/> (v1: the default template).
-/// A line matching the template starts a new event; following lines that don't match belong to it (FR-F3).
+/// Parses plain-text logs whose event lines a <see cref="LinePattern"/> describes: Serilog text (by default the file sink's template), NLog, log4net
+/// or a user's regular expression. A line matching the pattern starts a new event; following lines that don't match belong to it (FR-F3).
 /// Non-blank text that precedes the first event is kept as <em>unparsed</em> events instead of being dropped (FR-F5);
 /// later lines that don't match are continuation lines of the event before them.
 /// </summary>
 /// <remarks>
-/// <see cref="Parse"/> handles a complete file. <see cref="SerilogTextParser"/> drives the same <see cref="ParseChunk"/> routine
+/// <see cref="Parse"/> handles a complete file. <see cref="TextLogParser"/> drives the same <see cref="ParseChunk"/> routine
 /// for text that arrives in pieces (progressive loading and live tail), so both paths produce identical events.
 /// </remarks>
 public sealed class PlainTextLogParser
@@ -22,16 +22,17 @@ public sealed class PlainTextLogParser
 
     // "System.InvalidOperationException: message", "ArgumentException", "Foo.Error:", "System.Exception: x" ...
     // A bare "Exception" / "Error" with no namespace or prefix is deliberately NOT a header ("Error: disk full" is a message).
-    private static readonly Regex ExceptionHeader = new(
-        @"^(?:(?:[A-Za-z_][\w`+<>]*\.)+(?:Exception|Error)|(?:[A-Za-z_][\w`+<>]*\.)*[A-Za-z_][\w`+<>]*(?:Exception|Error))(?::|\s|$)",
-        RegexOptions.CultureInvariant | RegexOptions.Compiled,
-        TimeSpan.FromSeconds(2));
+    internal const string ExceptionHeaderPattern =
+        @"(?:(?:[A-Za-z_][\w`+<>]*\.)+(?:Exception|Error)|(?:[A-Za-z_][\w`+<>]*\.)*[A-Za-z_][\w`+<>]*(?:Exception|Error))(?::|\s|$)";
 
-    private readonly OutputTemplate _template;
+    private static readonly Regex ExceptionHeader = new("^" + ExceptionHeaderPattern, RegexOptions.CultureInvariant | RegexOptions.Compiled, TimeSpan.FromSeconds(2));
 
-    public PlainTextLogParser(OutputTemplate? template = null)
+    private readonly LinePattern _pattern;
+
+    /// <param name="pattern">The event lines to recognise; Serilog's default file template when null.</param>
+    public PlainTextLogParser(LinePattern? pattern = null)
     {
-        _template = template ?? OutputTemplate.Default;
+        _pattern = pattern ?? SerilogText.OutputTemplate.Default.Pattern;
     }
 
     public ParseResult Parse(string text, string? sourceFile = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
@@ -94,10 +95,10 @@ public sealed class PlainTextLogParser
                 progress?.Report((double)pos / text.Length);
             }
 
-            if (TryStartEvent(text, lineStart, lineEnd, out var timestamp, out var level, out var firstLineMessage, out var properties))
+            if (_pattern.TryRead(text, lineStart, lineEnd, out var fields))
             {
                 Flush();
-                state.Begin(lineStart, lineEnd, timestamp, level, firstLineMessage, properties);
+                state.Begin(lineStart, lineEnd, fields);
                 continue;
             }
 
@@ -147,86 +148,8 @@ public sealed class PlainTextLogParser
         }
     }
 
-    /// <summary>True when the line starts an event of this template (used by format detection, FR-F1).</summary>
-    internal bool IsEventStart(string line) => TryStartEvent(line, 0, line.Length, out _, out _, out _, out _);
-
-    private bool TryStartEvent(
-        string text,
-        int start,
-        int end,
-        out DateTimeOffset timestamp,
-        out LogLevel level,
-        out string message,
-        out Dictionary<string, LogValue>? properties)
-    {
-        timestamp = default;
-        level = LogLevel.Unknown;
-        message = string.Empty;
-        properties = null;
-
-        var length = end - start;
-        if (length == 0 || (_template.StartsWithDigit && (uint)(text[start] - '0') > 9))
-        {
-            return false;
-        }
-
-        Match match;
-        try
-        {
-            match = _template.StartOfEvent.Match(text, start, length);
-        }
-        catch (RegexMatchTimeoutException)
-        {
-            return false; // NFR-10: a pathological line is a continuation line, never a crash
-        }
-
-        if (!match.Success)
-        {
-            return false;
-        }
-
-        var ts = match.Groups["ts"];
-        if (!_template.ParseTimestamp(text.AsSpan(ts.Index, ts.Length), out timestamp))
-        {
-            return false;
-        }
-
-        var lvl = match.Groups["lvl"];
-        level = LogLevelParser.Parse(text.AsSpan(lvl.Index, lvl.Length));
-        var msg = match.Groups["msg"];
-        message = text.Substring(msg.Index, msg.Length);
-
-        var names = _template.PropertyNames;
-        if (names.Count > 0)
-        {
-            properties = new Dictionary<string, LogValue>(names.Count, StringComparer.Ordinal);
-            for (var i = 0; i < names.Count; i++)
-            {
-                var group = match.Groups[PropertyGroups[i]];
-                properties[names[i]] = PropertyValue(text.AsSpan(group.Index, group.Length));
-            }
-        }
-
-        return true;
-    }
-
-    private static readonly string[] PropertyGroups = [.. Enumerable.Range(0, 64).Select(i => "p" + i.ToString(System.Globalization.CultureInfo.InvariantCulture))];
-
-    /// <summary>A property written by the template: quoted text loses its quotes, a whole number becomes a number, anything else stays text.</summary>
-    private static LogValue PropertyValue(ReadOnlySpan<char> raw)
-    {
-        if (raw.Length >= 2 && raw[0] == '"' && raw[^1] == '"')
-        {
-            return new LogValue(raw[1..^1].ToString().Replace("\\\"", "\"", StringComparison.Ordinal).Replace("\\\\", "\\", StringComparison.Ordinal));
-        }
-
-        if (raw.Length is > 0 and < 19 && long.TryParse(raw, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var number))
-        {
-            return new LogValue(number);
-        }
-
-        return new LogValue(raw.ToString());
-    }
+    /// <summary>True when the line starts an event of this pattern (used by format detection, FR-F1).</summary>
+    internal bool IsEventStart(string line) => _pattern.TryRead(line, 0, line.Length, out _);
 
     /// <summary>True if <paramref name="line"/> begins an exception: a "Namespace.XyzException: ..." header or a "   at Foo.Bar(...)" frame.</summary>
     internal static bool IsExceptionStart(ReadOnlySpan<char> line)
@@ -262,6 +185,7 @@ public sealed class PlainTextLogParser
         private int _messageContinuationStart;
         private int _exceptionStart;
         private Dictionary<string, LogValue>? _properties;
+        private string? _firstLineException;
         private bool _active;
 
         public readonly bool Active => _active;
@@ -269,15 +193,16 @@ public sealed class PlainTextLogParser
         /// <summary>Index in the parsed text of the first character of the event being built.</summary>
         public readonly int Start => _start;
 
-        public void Begin(int start, int lineEnd, DateTimeOffset timestamp, LogLevel level, string message, Dictionary<string, LogValue>? properties)
+        public void Begin(int start, int lineEnd, in LineFields fields)
         {
-            _properties = properties;
+            _properties = fields.Properties;
             _active = true;
             _start = start;
             _end = lineEnd;
-            _timestamp = timestamp;
-            _level = level;
-            _message = message;
+            _timestamp = fields.Timestamp;
+            _level = fields.Level;
+            _message = fields.Message;
+            _firstLineException = fields.Exception;
             _messageContinuationStart = -1;
             _exceptionStart = -1;
         }
@@ -292,6 +217,12 @@ public sealed class PlainTextLogParser
             _end = lineEnd;
             if (_exceptionStart >= 0)
             {
+                return;
+            }
+
+            if (_firstLineException is not null)
+            {
+                _exceptionStart = lineStart; // the exception began on the event's own line: what follows is its stack trace
                 return;
             }
 
@@ -311,7 +242,13 @@ public sealed class PlainTextLogParser
             var message = _message;
             string? exception = null;
 
-            if (_exceptionStart >= 0)
+            if (_firstLineException is not null)
+            {
+                exception = _exceptionStart < 0
+                    ? _firstLineException
+                    : string.Concat(_firstLineException, "\n", text.AsSpan(_exceptionStart, _end - _exceptionStart));
+            }
+            else if (_exceptionStart >= 0)
             {
                 exception = text.Substring(_exceptionStart, _end - _exceptionStart);
                 if (_messageContinuationStart >= 0)

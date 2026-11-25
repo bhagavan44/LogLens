@@ -112,7 +112,7 @@ public partial class App : Application
     {
         try
         {
-            new Core.Formats.SerilogText.PlainTextLogParser().Parse("2026-11-13 00:00:00.000 +00:00 [INF] warm up\nSystem.Exception: x\n   at A.B()\n");
+            new Core.Formats.Text.PlainTextLogParser().Parse("2026-11-13 00:00:00.000 +00:00 [INF] warm up\nSystem.Exception: x\n   at A.B()\n");
         }
         catch (Exception)
         {
