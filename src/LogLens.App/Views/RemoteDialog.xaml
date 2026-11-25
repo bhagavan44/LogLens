@@ -26,11 +26,14 @@
         </Style>
     </ContentDialog.Resources>
 
-    <Grid Width="720" Height="430">
+    <!-- 430 high, or less in a small window: the lists shrink so the buttons below them stay in view (see OnRootLoaded) -->
+    <Grid x:Name="Root" Width="720" MaxHeight="430" Loaded="OnRootLoaded">
+        <Border Width="0" Height="430" IsHitTestVisible="False" />
 
         <!-- 1. The hosts -->
         <Grid x:Name="HostsPanel" RowSpacing="8">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
@@ -41,9 +44,17 @@
                 TextWrapping="Wrap"
                 Style="{StaticResource CaptionTextBlockStyle}"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <TextBox
+                x:Name="HostFilterBox"
+                Grid.Row="1"
+                PlaceholderText="Filter hosts by name, address or user"
+                TextChanged="OnHostFilterChanged"
+                KeyDown="OnHostFilterKeyDown"
+                AutomationProperties.Name="Filter hosts"
+                ToolTipService.ToolTip="Show only the hosts whose name, address, user or port contains every word typed" />
             <ListView
                 x:Name="HostList"
-                Grid.Row="1"
+                Grid.Row="2"
                 SelectionMode="Single"
                 SelectionChanged="OnHostSelectionChanged"
                 DoubleTapped="OnHostDoubleTapped"
@@ -53,7 +64,7 @@
                 AutomationProperties.Name="Remote hosts" />
             <TextBlock
                 x:Name="NoHostsText"
-                Grid.Row="1"
+                Grid.Row="2"
                 Margin="16"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
@@ -62,12 +73,14 @@
                 Visibility="Collapsed"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 Text="No hosts yet. Add an SSH host (for example an Ubuntu server) or a Windows share." />
-            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8">
                 <Button Content="Add host…" Click="OnAddHostClick" />
                 <Button x:Name="EditHostButton" Content="Edit…" Click="OnEditHostClick" IsEnabled="False" />
+                <Button x:Name="DuplicateHostButton" Content="Duplicate…" Click="OnDuplicateHostClick" IsEnabled="False"
+                        ToolTipService.ToolTip="Add a new host with the selected host's details" />
                 <Button x:Name="RemoveHostButton" Content="Remove" Click="OnRemoveHostClick" IsEnabled="False" />
             </StackPanel>
-            <TextBlock x:Name="HostsError" Grid.Row="3" Visibility="Collapsed" TextWrapping="Wrap" IsTextSelectionEnabled="True" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+            <TextBlock x:Name="HostsError" Grid.Row="4" Visibility="Collapsed" TextWrapping="Wrap" IsTextSelectionEnabled="True" Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
         </Grid>
 
         <!-- 2. Adding or editing a host -->

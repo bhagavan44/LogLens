@@ -47,7 +47,9 @@ sub-folders, or the empty space or Ctrl+L to type a path), filter and order the 
 and open them in tabs or merge them. They tail, refresh, bookmark and reopen like local files; the status
 shows *Reconnecting…* when a host stops answering, and the tail carries on where it was when it is back.
 *Add host…* saves a host: for SSH the host name, port, user, optionally a private key file (OpenSSH, PEM or
-PuTTY `.ppk`) and a folder to start in.
+PuTTY `.ppk`) and a folder to start in. *Duplicate…* starts a new host from the selected one's details, for
+example another server with the same user and key. Type in the box above the list to show only the hosts whose
+name, address, user or port contain every word typed.
 
 - **Signing in:** LogLens tries the host's key file, otherwise `id_ed25519`, `id_ecdsa` or `id_rsa` in your
   `.ssh` folder, and asks for a key's passphrase or a password when it needs one. Passwords and passphrases

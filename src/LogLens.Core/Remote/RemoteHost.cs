@@ -113,6 +113,41 @@ public sealed record RemoteHost
         };
     }
 
+    /// <summary>
+    /// True when every word of <paramref name="filter"/> is found (ignoring case) in the host's name, address, user, port or
+    /// summary; an empty filter matches every host.
+    /// </summary>
+    public bool Matches(string? filter)
+    {
+        var words = (filter ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 0)
+        {
+            return true;
+        }
+
+        string[] fields = Kind == RemoteHostKind.WindowsShare
+            ? [DisplayName, Address]
+            : [DisplayName, Address, UserName, Port.ToString(System.Globalization.CultureInfo.InvariantCulture), Summary];
+        return words.All(word => fields.Any(field => field.Contains(word, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>
+    /// A copy of this host to save as a new one, named "<c>name (copy)</c>" — or "<c>(copy 2)</c>" and so on — so the name
+    /// isn't one of <paramref name="takenNames"/> (compared ignoring case).
+    /// </summary>
+    public RemoteHost Duplicate(IEnumerable<string> takenNames)
+    {
+        var taken = new HashSet<string>(takenNames, StringComparer.OrdinalIgnoreCase);
+        var name = DisplayName;
+        var copy = $"{name} (copy)";
+        for (var n = 2; taken.Contains(copy); n++)
+        {
+            copy = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{name} (copy {n})");
+        }
+
+        return this with { Name = copy };
+    }
+
     /// <summary>True when <paramref name="location"/> is a file on this (SSH) host.</summary>
     public bool Serves(RemoteLocation location)
         => Kind == RemoteHostKind.Ssh

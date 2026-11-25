@@ -55,6 +55,7 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
     private int _hiddenCrumbs;
     private CancellationTokenSource? _subFolders;
     private bool _closed;
+    private bool _clearingFilter;
 
     public RemoteDialog(
         IReadOnlyList<RemoteHost> savedHosts,
@@ -125,6 +126,24 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
 
     private static Visibility Visible(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
 
+    /// <summary>
+    /// The dialog puts its content in a scroll viewer, so in a window too low for the content the buttons under the lists end up
+    /// out of sight. Without vertical scrolling the content is measured against the height that is left and asks for at most
+    /// that (the 430-high border only sets the size wanted); the lists' rows then shrink instead. The edit form scrolls by itself.
+    /// </summary>
+    private void OnRootLoaded(object sender, RoutedEventArgs e)
+    {
+        for (var node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(Root); node is not null && !ReferenceEquals(node, this); node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+        {
+            if (node is ScrollViewer scroller)
+            {
+                scroller.VerticalScrollMode = ScrollMode.Disabled;
+                scroller.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+                return;
+            }
+        }
+    }
+
     private void OnPrimaryClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
         switch (_stage)
@@ -189,6 +208,14 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
 
     private void RebuildHosts(RemoteHost? select)
     {
+        // A host just saved is shown even when the filter would hide it.
+        if (select is not null && !select.Matches(HostFilterBox.Text))
+        {
+            _clearingFilter = true;
+            HostFilterBox.Text = string.Empty;
+            _clearingFilter = false;
+        }
+
         HostList.Items.Clear();
         var items = _saved.Select(h => new HostItem(h, false)).ToList();
 
@@ -201,6 +228,9 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
                 items.Add(new HostItem(config, true));
             }
         }
+
+        var total = items.Count;
+        items.RemoveAll(item => !item.Host.Matches(HostFilterBox.Text));
 
         ListViewItem? selected = null;
         foreach (var item in items)
@@ -236,16 +266,43 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
         }
 
         HostList.SelectedItem = selected ?? HostList.Items.FirstOrDefault();
+        NoHostsText.Text = total == 0
+            ? "No hosts yet. Add an SSH host (for example an Ubuntu server) or a Windows share."
+            : "No hosts match the filter. Change or clear it to see more hosts.";
         NoHostsText.Visibility = Visible(HostList.Items.Count == 0);
         UpdateHostButtons();
     }
 
     private HostItem? SelectedHost => (HostList.SelectedItem as ListViewItem)?.Tag as HostItem;
 
+    private void OnHostFilterChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_clearingFilter)
+        {
+            RebuildHosts(select: SelectedHost?.Host); // keeps the selected host when it still matches
+        }
+    }
+
+    private void OnHostFilterKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Windows.System.VirtualKey.Down when HostList.Items.Count > 0:
+                e.Handled = true;
+                (HostList.SelectedItem as ListViewItem ?? (ListViewItem)HostList.Items[0]).Focus(FocusState.Keyboard);
+                break;
+            case Windows.System.VirtualKey.Escape when HostFilterBox.Text.Length > 0:
+                e.Handled = true; // clear the filter, not close the dialog
+                HostFilterBox.Text = string.Empty;
+                break;
+        }
+    }
+
     private void UpdateHostButtons()
     {
         var item = SelectedHost;
         EditHostButton.IsEnabled = item is not null;
+        DuplicateHostButton.IsEnabled = item is not null;
         RemoveHostButton.IsEnabled = item is { FromConfig: false };
         if (_stage == Stage.Hosts)
         {
@@ -263,13 +320,24 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
         }
     }
 
-    private void OnAddHostClick(object sender, RoutedEventArgs e) => BeginEdit(null, fromConfig: false);
+    private void OnAddHostClick(object sender, RoutedEventArgs e) => BeginEdit(null, editing: null, "Add host");
 
     private void OnEditHostClick(object sender, RoutedEventArgs e)
     {
         if (SelectedHost is { } item)
         {
-            BeginEdit(item.Host, item.FromConfig);
+            // A host from ~/.ssh/config is saved as a new LogLens host.
+            BeginEdit(item.Host, item.FromConfig ? null : item.Host, item.FromConfig ? "Save as a LogLens host" : "Edit host");
+        }
+    }
+
+    /// <summary>Opens the host form filled in with the selected host's details, saved as a new host.</summary>
+    private void OnDuplicateHostClick(object sender, RoutedEventArgs e)
+    {
+        if (SelectedHost is { } item)
+        {
+            var copy = item.Host.Duplicate(_saved.Concat(_configHosts).Select(h => h.DisplayName));
+            BeginEdit(copy, editing: null, "Duplicate host");
         }
     }
 
@@ -431,10 +499,11 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
 
     // ---------------------------------------------------------------- adding and editing a host
 
-    private void BeginEdit(RemoteHost? host, bool fromConfig)
+    /// <summary>Shows the host form with <paramref name="host"/>'s fields; saving replaces <paramref name="editing"/>, or adds a host when null.</summary>
+    private void BeginEdit(RemoteHost? host, RemoteHost? editing, string title)
     {
-        _editing = fromConfig ? null : host; // a host from ~/.ssh/config is saved as a new LogLens host
-        EditTitle.Text = host is null ? "Add host" : fromConfig ? "Save as a LogLens host" : "Edit host";
+        _editing = editing;
+        EditTitle.Text = title;
         var h = host ?? new RemoteHost();
         KindBox.SelectedIndex = (int)h.Kind;
         NameBox.Text = host is null ? string.Empty : h.Name;
