@@ -13,7 +13,10 @@ public sealed record LaunchRequest(string WorkingDirectory, IReadOnlyList<string
     public const int MaxArguments = 200;
 
     /// <summary>The files to open, as full paths (options and their values left out, see <see cref="CommandLine"/>).</summary>
-    public IReadOnlyList<string> ResolvePaths() => CommandLine.Parse(Arguments, WorkingDirectory).Files;
+    public IReadOnlyList<string> ResolvePaths() => Resolve().Files;
+
+    /// <summary>The handed-over command line, read as if this process had been started with it.</summary>
+    public CommandLine Resolve() => CommandLine.Parse(Arguments, WorkingDirectory);
 }
 
 /// <summary>

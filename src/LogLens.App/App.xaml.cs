@@ -69,10 +69,10 @@ public partial class App : Application
         var viewModel = window.ViewModel;
         viewModel.RemembersSession = primary;
 
-        // "Open with" / command line: LogLens.exe [--data-dir <folder>] [<log file> ...]; otherwise what was open last time (FR-P3).
+        // "Open with" / command line: LogLens.exe [--data-dir <folder>] [--merge] [<log file> ...]; otherwise what was open last time (FR-P3).
         if (Program.CommandLine.Files.Count > 0)
         {
-            window.Open(Program.CommandLine.Files);
+            window.Open(Program.CommandLine.Files, Program.CommandLine.Merge);
         }
         else if (primary && Services.GetRequiredService<SettingsService>().Current.RestoreSession)
         {

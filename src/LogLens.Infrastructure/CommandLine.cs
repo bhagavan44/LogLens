@@ -6,8 +6,12 @@ namespace LogLens.Infrastructure;
 /// </summary>
 /// <param name="Files">The files to open, as full paths.</param>
 /// <param name="DataDir">The folder after <c>--data-dir</c>; null without the option, empty when the option has no folder after it.</param>
-public sealed record CommandLine(IReadOnlyList<string> Files, string? DataDir)
+/// <param name="Merge">True with <c>--merge</c>: the files open as one merged view (FR-O4) instead of a tab each.</param>
+public sealed record CommandLine(IReadOnlyList<string> Files, string? DataDir, bool Merge = false)
 {
+    /// <summary>Opens the files given as one merged view (FR-O4).</summary>
+    public const string MergeOption = "--merge";
+
     /// <summary>Keeps settings and state in another folder (FR-P6).</summary>
     public const string DataDirOption = "--data-dir";
 
@@ -19,6 +23,7 @@ public sealed record CommandLine(IReadOnlyList<string> Files, string? DataDir)
         ArgumentNullException.ThrowIfNull(args);
         var files = new List<string>();
         string? dataDir = null;
+        var merge = false;
 
         for (var i = 0; i < args.Count; i++)
         {
@@ -34,6 +39,12 @@ public sealed record CommandLine(IReadOnlyList<string> Files, string? DataDir)
                 continue;
             }
 
+            if (string.Equals(arg, MergeOption, StringComparison.OrdinalIgnoreCase))
+            {
+                merge = true;
+                continue;
+            }
+
             if (arg.StartsWith("--", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(arg))
             {
                 continue; // unknown switches are ignored rather than opened as files
@@ -42,7 +53,7 @@ public sealed record CommandLine(IReadOnlyList<string> Files, string? DataDir)
             files.Add(ToFullPath(arg, workingDirectory));
         }
 
-        return new CommandLine(files, dataDir);
+        return new CommandLine(files, dataDir, merge);
     }
 
     private static string ToFullPath(string path, string workingDirectory)

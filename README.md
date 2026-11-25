@@ -251,12 +251,13 @@ brings back the two tips shown the first time a log is open.
 ### Command line
 
 ```
-LogLens.exe [--data-dir <folder>] [--new-window] [<log file> ...]
+LogLens.exe [--data-dir <folder>] [--new-window] [--merge] [<log file> ...]
 ```
 
 Each file opens in a tab of its own.
 
 - `--data-dir <folder>` keeps the settings, recent files, bookmarks, open tabs and diagnostics in
+- `--merge` opens the files as one merged view instead, ordered by time with a *Source* column.
   `<folder>\LogLens` instead of `%APPDATA%\LogLens` and `%LOCALAPPDATA%\LogLens`, for a portable copy
   or for testing. Each folder is a separate LogLens.
 - `--new-window` starts a separate LogLens instead of handing the file to the running one; it does not
