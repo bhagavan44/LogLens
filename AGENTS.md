@@ -27,7 +27,7 @@ code must stay ready for them (see *Formats* below).
 | Path | Purpose |
 |---|---|
 | `src/LogLens.Core` | UI-free models, format parsers, filtering and query language, analysis, export writers. No Windows or file-system dependencies. |
-| `src/LogLens.Infrastructure` | File loading and tailing, settings / state stores, diagnostics, single instance, Open with registration. Depends on Core. |
+| `src/LogLens.Infrastructure` | File loading and tailing, settings / state stores, diagnostics, single instance, Open with registration, SSH/SFTP remote hosts (`Remote/`, SSH.NET). Depends on Core. |
 | `src/LogLens.ViewModels` | UI-free view-models. No WinUI types, so they stay unit-testable. |
 | `src/LogLens.App` | WinUI 3 app: views, services, composition root. Depends on all of the above. |
 | `tests/*` | Unit tests for Core, Infrastructure and ViewModels. WinUI code has no unit tests. |
@@ -68,7 +68,15 @@ an otherwise empty folder.
   last valid one.
 - Never take an exclusive lock on a log file: open with `FileShare.ReadWrite | FileShare.Delete`.
   The viewer is read-only.
-- No telemetry and no network calls (NFR-9).
+- No telemetry, and no network calls except SSH/SFTP to hosts the user connects to (NFR-9, FR-O7). Remote
+  files are only ever opened for reading.
+- **Remote files** are `sftp://user@host[:port]/path` (`RemoteLocation`) wherever a local path goes; never pass
+  one to `Path.GetFullPath` (use `RemoteLocation.Normalise`). Reading goes through `ILogFileSystem`; the stream
+  factory gets a remote one from `SftpConnections.FileSystemFor` once `IRemoteConnector` has connected the host
+  (`MainViewModel` does that before opening). In `FileLogStream`'s reader, do all I/O before committing a chunk,
+  so a dropped connection mid-read changes nothing.
+- Passwords and passphrases are never written anywhere (settings, state, the diagnostics log). SSH host keys are
+  checked against a `IHostKeyTrust.Snapshot()` taken on the UI thread, so `state.json` is only touched there.
 - Malformed input never crashes the app: unparsable lines become *Unparsed* events (FR-F5).
 - In dialogs, set brushes through styles with `{ThemeResource …}`, not from
   `Application.Current.Resources` in code.

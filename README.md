@@ -8,7 +8,8 @@ grid, follows logs while they are being written, and never changes the files it 
 > (`{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}`) or your
 > own output template, compact JSON (CLEF) and classic JSON. It also reads text logs written by
 > [NLog](https://nlog-project.org) and [log4net](https://logging.apache.org/log4net/), and any text log
-> you can describe with a regular expression. Remote hosts are planned; see the [roadmap](SPEC.md#8-roadmap).
+> you can describe with a regular expression, on this PC, a Windows share or an SSH server. See the
+> [roadmap](SPEC.md#8-roadmap) for what comes next.
 
 ## Install
 
@@ -37,6 +38,29 @@ A **merged view** (*Open folder ▸ Merge into one view*, or *File ▸ Merge fil
 events of several files into one list ordered by time, with a *Source* column naming each event's
 file: the logs of several services, or the files of a rolling log, side by side. Files logged in
 different time zones interleave correctly. A merged view is a snapshot: it does not follow the files.
+
+**Logs on other machines.** *File ▸ Open from remote host* (Ctrl+Shift+R, or *Remote host…* on the start
+screen) lists your hosts: **SSH hosts**, such as Ubuntu servers, read over SFTP, and **Windows shares**
+(`\\server\share\logs`). The hosts in your `~/.ssh/config` are listed too. Choose one and *Connect*, browse its
+folders (click a part of the path to go back to that folder, the arrow after it to jump into one of its
+sub-folders, or the empty space or Ctrl+L to type a path), filter and order the files, tick the logs you want
+and open them in tabs or merge them. They tail, refresh, bookmark and reopen like local files; the status
+shows *Reconnecting…* when a host stops answering, and the tail carries on where it was when it is back.
+*Add host…* saves a host: for SSH the host name, port, user, optionally a private key file (OpenSSH, PEM or
+PuTTY `.ppk`) and a folder to start in.
+
+- **Signing in:** LogLens tries the host's key file, otherwise `id_ed25519`, `id_ecdsa` or `id_rsa` in your
+  `.ssh` folder, and asks for a key's passphrase or a password when it needs one. Passwords and passphrases
+  are kept in memory only, so a dropped connection can be re-established, and are never saved. ssh-agent and
+  Pageant keys are not used.
+- **Host keys:** the first time you connect to a host that isn't in your `~/.ssh/known_hosts`, LogLens shows
+  its fingerprint (`SHA256:…`). Compare it with `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the
+  server before choosing *Trust and connect*. If a host's key changes, LogLens refuses to connect; after a
+  server was reinstalled, use *Forget host key* in the host's settings (or fix `known_hosts`).
+- **Paths:** a remote file is written `sftp://user@host[:port]/path/to/app.log`. You can pass that on the
+  command line, and it is what the recent files and reopened tabs use; opening one from there connects first.
+- **Windows shares** are read by Windows with your account. If a share needs other credentials, open it once
+  in File Explorer first.
 
 LogLens runs once per user: opening another file from Explorer or the command line while it runs
 opens the file in a new tab of the running window and brings it to the front. When you start LogLens
@@ -156,6 +180,7 @@ With tail off, **Refresh** (F5) reads what was written since the file was last r
 |---|---|
 | Ctrl+T | Tail on / off |
 | Ctrl+Shift+P | Pause / resume the tail |
+| Ctrl+Shift+R | Open from remote host |
 | F5 | Refresh (with tail off) |
 
 Files are read as UTF-8, or UTF-16 when they start with a byte-order mark.
@@ -266,18 +291,22 @@ Each file opens in a tab of its own.
 
 ## Privacy
 
-LogLens sends no telemetry and makes no network calls. Logs are only read, opened with sharing so
-the app writing them is never blocked. LogLens writes these files of its own:
+LogLens sends no telemetry. Its only network connections are to the SSH hosts you connect to, to read
+logs (Windows shares are reached by Windows itself). Logs are only read, opened with sharing so the app
+writing them is never blocked; remote files are opened for reading only. LogLens writes these files of its
+own:
 
-- `%APPDATA%\LogLens\state.json`: the recent files, bookmarks and open tabs.
-- `%APPDATA%\LogLens\settings.json`: your settings, hide rules, saved filters and the column layout.
+- `%APPDATA%\LogLens\state.json`: the recent files, bookmarks, open tabs and the SSH host keys you accepted.
+- `%APPDATA%\LogLens\settings.json`: your settings, hide rules, saved filters, the column layout and your
+  remote hosts (never a password).
 - `%LOCALAPPDATA%\LogLens\logs\`: LogLens's own diagnostics log (what it did and what went wrong, never
   the content of your logs; the last 14 days) and a report for each unexpected error (the last 10).
   *Settings ▸ Open diagnostics folder* shows them; attach one to a bug report if you like. Nothing is
   sent anywhere.
 
 *Open with* writes to the registry under `HKEY_CURRENT_USER\Software\Classes` only when you press
-*Register*, and *Remove* deletes it again. Anything else is a file you chose to export.
+*Register*, and *Remove* deletes it again. Anything else is a file you chose to export. Your
+`~/.ssh/config` and `~/.ssh/known_hosts` are read, never written.
 
 ## Contributing
 
