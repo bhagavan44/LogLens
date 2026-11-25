@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.1.0](https://github.com/bhagavan44/LogLens/compare/v1.0.0...v1.1.0) (2026-11-24)
+
+
+### Features
+
+* add filters, find, query bar and go to (v0.2) ([#6](https://github.com/bhagavan44/LogLens/issues/6)) ([9e74b79](https://github.com/bhagavan44/LogLens/commit/9e74b79e26cfdf00ad1d4b5712d2653eb7ca61f7))
+* add live logs: background load, tail, rolling files, single instance, recent files and session (v0.3) ([#8](https://github.com/bhagavan44/LogLens/issues/8)) ([9f51ac2](https://github.com/bhagavan44/LogLens/commit/9f51ac2e7810269927ac157af6afa6741cea6839))
+* add many logs: tabs, open folder, merge view, bookmarks and find all (v0.4) ([#9](https://github.com/bhagavan44/LogLens/issues/9)) ([4d7259c](https://github.com/bhagavan44/LogLens/commit/4d7259c4f486b342315059fe49944a2e878e5b7f))
+* add settings, hide rules, saved filters, Open with, diagnostics and accessibility pass (v1.0) ([#13](https://github.com/bhagavan44/LogLens/issues/13)) ([3429039](https://github.com/bhagavan44/LogLens/commit/3429039a58b7c497954226daef68825ae18d1d63))
+* add the Context column, Properties tab, Format menu and template editor ([b25a70f](https://github.com/bhagavan44/LogLens/commit/b25a70fa8753f91fc436b48c782a793487746982))
+* add timeline, statistics, export and view options (v0.5) ([#10](https://github.com/bhagavan44/LogLens/issues/10)) ([eb2aeb3](https://github.com/bhagavan44/LogLens/commit/eb2aeb386884c432a8db89034daa84d5ddf9a130))
+* export message templates and properties in JSON lines ([febf0a8](https://github.com/bhagavan44/LogLens/commit/febf0a8bd622d5514956f271ef61bde9b7cffc9e))
+* filter on properties and message templates in the query bar ([9796174](https://github.com/bhagavan44/LogLens/commit/9796174f421ce91a948ac8aed6dc5fbda8d48587))
+* read Serilog CLEF, classic JSON and custom templates with format detection ([b4345f6](https://github.com/bhagavan44/LogLens/commit/b4345f64b1d41586ebf042d5ea4c0130a14b64ee))
+* show event properties and choose a log's format in the view-models ([7545ad5](https://github.com/bhagavan44/LogLens/commit/7545ad58be10b78cb5352a8f1dd5eda45c749494))
+
+
+### Documentation
+
+* describe structured formats and split the formats roadmap row ([68a54af](https://github.com/bhagavan44/LogLens/commit/68a54af4eeb6db8d1415104f4c8fc3dd1805de02))
+
 ## 1.0.0 (2026-11-22)
 
 
