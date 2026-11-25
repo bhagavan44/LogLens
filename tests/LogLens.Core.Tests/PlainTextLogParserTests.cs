@@ -2,13 +2,14 @@ using System.Diagnostics;
 using System.Text;
 using LogLens.Core.Models;
 using LogLens.Core.Formats.SerilogText;
+using LogLens.Core.Formats.Text;
 
 namespace LogLens.Core.Tests;
 
 public class PlainTextLogParserTests
 {
     private static ParseResult Parse(string text, OutputTemplate? template = null)
-        => new PlainTextLogParser(template).Parse(text, "test.txt");
+        => new PlainTextLogParser(template?.Pattern).Parse(text, "test.txt");
 
     private static string Line(string time, string level, string message)
         => $"2026-11-13 {time} +05:30 [{level}] {message}";

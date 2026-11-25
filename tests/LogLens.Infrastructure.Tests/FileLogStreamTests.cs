@@ -1,6 +1,7 @@
 using System.Text;
 using LogLens.Core.Formats;
 using LogLens.Core.Formats.SerilogText;
+using LogLens.Core.Formats.Text;
 using LogLens.Core.Models;
 using LogLens.Core.Streaming;
 using LogLens.Infrastructure.Loading;

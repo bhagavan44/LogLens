@@ -38,6 +38,15 @@ public class QueryTests
         Assert.False(Compile("@l in ['Error', 'Fatal']")(Info));
     }
 
+    [Fact]
+    public void Level_names_of_other_loggers_work_in_queries()
+    {
+        Assert.True(Compile("@l = 'INFO'")(Info));
+        Assert.True(Compile("@l >= 'WARN'")(Error));
+        Assert.False(Compile("@l >= 'WARN'")(Info));
+        Assert.Contains("Loud", Fail("@l = 'Loud'").Message);
+    }
+
     [Theory]
     [InlineData("@l >= 'Warning'", false, true, true, true)]
     [InlineData("@l > 'Warning'", false, false, true, true)]

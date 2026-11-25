@@ -16,7 +16,7 @@ using Windows.Storage.Pickers;
 namespace LogLens.App.Views;
 
 /// <summary>
-/// Settings (FR-P1 … FR-P6, FR-S6, FR-F2): appearance, timestamps, start-up, custom output templates, hide rules, <i>Open with</i> and settings
+/// Settings (FR-P1 … FR-P6, FR-S6, FR-F2): appearance, timestamps, start-up, custom formats, hide rules, <i>Open with</i> and settings
 /// export / import. Nothing is
 /// applied until Save, except <i>Open with</i>, which changes the registry at once (it has its own Register / Remove buttons).
 /// </summary>
@@ -111,7 +111,7 @@ public sealed partial class SettingsDialog : ContentDialog
             .Select(r => new HideRule { Name = r.Name.Text.Trim(), Query = r.Query.Text.Trim(), Enabled = r.Enabled.IsChecked == true })],
         CustomTemplates = [.. _templates
             .Where(t => !t.IsBlank)
-            .Select(t => new CustomTemplate(t.Name.Text.Trim(), t.Template.Text.Trim()))],
+            .Select(t => new CustomTemplate(t.Name.Text.Trim(), t.Template.Text.Trim(), t.SelectedKind))],
     };
 
     /// <summary>An editable ComboBox updates SelectedItem / Text only when the text is committed: read whichever is current.</summary>
@@ -261,12 +261,14 @@ public sealed partial class SettingsDialog : ContentDialog
 
     private void UpdateRulesHint() => NoRulesText.Visibility = _rules.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
-    // ------------------------------------------------------------------ custom output templates (FR-F2)
+    // ------------------------------------------------------------------ custom formats (FR-F2, F5)
 
-    /// <summary>The controls of one custom template in the editor.</summary>
-    private sealed record TemplateRow(StackPanel Panel, TextBox Name, TextBox Template, TextBox Test, TextBlock Status)
+    /// <summary>The controls of one custom format in the editor.</summary>
+    private sealed record TemplateRow(StackPanel Panel, TextBox Name, ComboBox Kind, TextBox Template, TextBox Test, TextBlock Status)
     {
         public bool IsBlank => string.IsNullOrWhiteSpace(Name.Text) && string.IsNullOrWhiteSpace(Template.Text);
+
+        public TemplateKind SelectedKind => (TemplateKind)Math.Max(0, Kind.SelectedIndex);
     }
 
     private void OnAddTemplateClick(object sender, RoutedEventArgs e)
@@ -280,34 +282,54 @@ public sealed partial class SettingsDialog : ContentDialog
     private TemplateRow AddTemplateRow(CustomTemplate template)
     {
         var name = new TextBox { Text = template.Name, PlaceholderText = "Name, e.g. Shop API", Width = 160 };
-        var text = new TextBox { Text = template.Template, PlaceholderText = OutputTemplate.DefaultText, FontFamily = LogFormat.CodeFont };
-        var test = new TextBox { PlaceholderText = "Paste a line from the log to test the template", FontFamily = LogFormat.CodeFont };
+        var kind = new ComboBox { ItemsSource = TemplateKinds.Select(FormatCatalog.KindName).ToList(), SelectedIndex = (int)template.Kind, MinWidth = 190 };
+        var text = new TextBox { Text = template.Template, PlaceholderText = FormatCatalog.DefaultTemplate(template.Kind), FontFamily = LogFormat.CodeFont };
+        var test = new TextBox { PlaceholderText = "Paste a line from the log to test the format", FontFamily = LogFormat.CodeFont };
         var remove = new Button { Content = new SymbolIcon(Symbol.Delete), Padding = new Thickness(8, 4, 8, 4) };
         var status = new TextBlock { Style = (Style)Resources["Hint"] };
 
-        AutomationProperties.SetName(name, "Template name");
-        AutomationProperties.SetName(text, "Output template");
+        AutomationProperties.SetName(name, "Format name");
+        AutomationProperties.SetName(kind, "Written as");
+        AutomationProperties.SetName(text, FormatCatalog.KindName(template.Kind));
         AutomationProperties.SetName(test, "Test line");
-        AutomationProperties.SetName(remove, "Delete template");
+        AutomationProperties.SetName(remove, "Delete format");
         AutomationProperties.SetLiveSetting(status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        ToolTipService.SetToolTip(remove, "Delete this template");
+        ToolTipService.SetToolTip(kind, "What the format is written in: a Serilog output template, an NLog layout, a log4net conversion pattern or a regular expression");
+        ToolTipService.SetToolTip(remove, "Delete this format");
 
-        var line = new Grid { ColumnSpacing = 8 };
-        line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Grid.SetColumn(text, 1);
-        Grid.SetColumn(remove, 2);
-        line.Children.Add(name);
-        line.Children.Add(text);
-        line.Children.Add(remove);
+        var head = new Grid { ColumnSpacing = 8 };
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(kind, 1);
+        Grid.SetColumn(remove, 3);
+        head.Children.Add(name);
+        head.Children.Add(kind);
+        head.Children.Add(remove);
 
         var panel = new StackPanel { Spacing = 4 };
-        panel.Children.Add(line);
+        panel.Children.Add(head);
+        panel.Children.Add(text);
         panel.Children.Add(test);
         panel.Children.Add(status);
 
-        var row = new TemplateRow(panel, name, text, test, status);
+        var row = new TemplateRow(panel, name, kind, text, test, status);
+        var shownKind = template.Kind;
+        kind.SelectionChanged += (_, _) =>
+        {
+            // A template still at the old kind's starting text (or empty) switches to the new kind's; one the user wrote is kept.
+            var next = row.SelectedKind;
+            if (string.IsNullOrWhiteSpace(text.Text) || text.Text.Trim() == FormatCatalog.DefaultTemplate(shownKind))
+            {
+                text.Text = FormatCatalog.DefaultTemplate(next);
+            }
+
+            text.PlaceholderText = FormatCatalog.DefaultTemplate(next);
+            AutomationProperties.SetName(text, FormatCatalog.KindName(next));
+            shownKind = next;
+            ValidateTemplate(row);
+        };
         name.TextChanged += (_, _) => ValidateTemplates(); // a name can clash with another row's
         text.TextChanged += (_, _) => ValidateTemplate(row);
         test.TextChanged += (_, _) => ValidateTemplate(row);
@@ -338,11 +360,13 @@ public sealed partial class SettingsDialog : ContentDialog
         }
 
         var others = _templates.Where(t => !ReferenceEquals(t, row) && !t.IsBlank).Select(t => t.Name.Text);
-        var error = FormatCatalog.CheckCustomTemplate(row.Name.Text, row.Template.Text, others);
+        var error = FormatCatalog.CheckCustomTemplate(row.Name.Text, row.Template.Text, others, row.SelectedKind);
         row.Status.Style = (Style)Resources[error is null ? "Hint" : "ErrorHint"];
-        row.Status.Text = error ?? FormatCatalog.TestLine(row.Template.Text, row.Test.Text);
+        row.Status.Text = error ?? FormatCatalog.TestLine(row.Template.Text, row.Test.Text, row.SelectedKind);
         return error is null;
     }
+
+    private static readonly TemplateKind[] TemplateKinds = Enum.GetValues<TemplateKind>();
 
     private void UpdateTemplatesHint() => NoTemplatesText.Visibility = _templates.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 

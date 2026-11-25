@@ -6,8 +6,9 @@ grid, follows logs while they are being written, and never changes the files it 
 > **Status: early development.** LogLens reads the files written by [Serilog](https://serilog.net):
 > text with the default template
 > (`{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}`) or your
-> own output template, compact JSON (CLEF) and classic JSON. Other loggers (NLog, log4net, custom
-> regular expressions) are planned; see the [roadmap](SPEC.md#8-roadmap).
+> own output template, compact JSON (CLEF) and classic JSON. It also reads text logs written by
+> [NLog](https://nlog-project.org) and [log4net](https://logging.apache.org/log4net/), and any text log
+> you can describe with a regular expression. Remote hosts are planned; see the [roadmap](SPEC.md#8-roadmap).
 
 ## Install
 
@@ -50,11 +51,15 @@ rows instead of being dropped.
 
 **Formats.** LogLens recognises each file's format from its first lines: Serilog text with the default
 template, Serilog compact JSON (CLEF, as written by `CompactJsonFormatter`) and classic JSON
-(`JsonFormatter`), plus any output templates you add in [Settings](#settings). The status bar names the
-format. If a file is read wrongly, pick its format under *View ▸ Format*; the tab is read again with it,
-and the choice is remembered with the tab. *Detect automatically* goes back to detection. Structured logs
-(JSON, or a template with properties such as `{SourceContext}`) get a **Context** column naming the
-logging class.
+(`JsonFormatter`), NLog text with its default layout
+(`${longdate}|${level:uppercase=true}|${logger}|${message:withexception=true}`), log4net text with the
+usual pattern (`%date [%thread] %-5level %logger - %message%newline`), plus any custom formats you add in
+[Settings](#settings). The status bar names the format. If a file is read wrongly, pick its format under
+*View ▸ Format*; the tab is read again with it, and the choice is remembered with the tab. *Detect
+automatically* goes back to detection. Logs that name the logging class (JSON, NLog's `${logger}`,
+log4net's `%logger`, or a template with `{SourceContext}`) get a **Context** column showing it; for every
+format it is the `SourceContext` property. Level names such as `TRACE`, `INFO`, `WARN`, `NOTICE` or
+`CRITICAL` are understood, also in the query bar (`@l >= 'WARN'`).
 
 The **detail pane** on the right shows the selected event: the full message, the exception with its
 stack trace (*Copy exception*), and the raw text exactly as in the file, with the file name, line
@@ -202,11 +207,30 @@ Other *View* options:
   The detail pane always adds the offset.
 - **Opening and following**: reopen last time's tabs at start-up (on by default), and start every file
   you open with tail on.
-- **Formats**: add the output template your app writes its text logs with, under a name, for example
-  `{Timestamp:HH:mm:ss} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}`. Paste a line from
-  the log to check what the template reads from it. Any property token (`{SourceContext}`, `{ThreadId}`,
-  `{RequestId}` …) becomes a property you can filter on; `{Properties}` is not supported. Custom templates
-  are tried when a file opens and offered under *View ▸ Format*.
+- **Formats**: add the format your app writes its text logs in, under a name, and say what it is written
+  as. Paste a line from the log to check what the format reads from it. Custom formats are tried when a
+  file opens and offered under *View ▸ Format*.
+  - A **Serilog output template**, for example
+    `{Timestamp:HH:mm:ss} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}`. Any property token
+    (`{SourceContext}`, `{ThreadId}`, `{RequestId}` …) becomes a property you can filter on; `{Properties}` is
+    not supported.
+  - An **NLog layout**, copied from `NLog.config`, for example
+    `${longdate} [${threadid}] ${level:uppercase=true} ${logger}: ${message} ${exception:format=tostring}`.
+    `${longdate}`, `${date}`, `${shortdate}` and `${time}` are the time (with `format=` and `universalTime=true`),
+    `${logger}` is `SourceContext`, and other renderers become properties (`${event-properties:item=RequestId}`
+    is `RequestId`, `${threadid}` is `ThreadId`).
+  - A **log4net conversion pattern**, for example `%date{ABSOLUTE} [%thread] %-5level %logger - %message%newline`.
+    `%date` / `%utcdate` (`{ISO8601}`, `{ABSOLUTE}`, `{DATE}` or a .NET format) are the time, `%logger` is
+    `SourceContext`, and other conversions become properties (`%thread` is `Thread`, `%property{RequestId}` is
+    `RequestId`).
+  - A **regular expression** for the first line of an event, with named groups: `timestamp` (or `date` and
+    `time`) and `message` are required, `level` and `exception` are optional, `logger` is `SourceContext`, and
+    any other group becomes a property, for example
+    `^\[(?<timestamp>[^\]]+)\] (?<level>\w+)\s+(?<logger>\S+) :: (?<message>.*)$`. The time can be written in
+    any common way.
+
+  In every format, lines that don't start an event (stack traces, wrapped messages) belong to the event
+  above them.
 - **Hide rules**: add, name, switch off or delete them. A rule with a mistake is marked and has to be
   fixed (or switched off) before saving.
 - **Open with**: *Register* adds LogLens to Explorer's *Open with* menu for `.log` (and, if you tick them,

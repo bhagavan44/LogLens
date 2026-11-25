@@ -2,7 +2,11 @@ using LogLens.Core.Models;
 
 namespace LogLens.Core.Formats;
 
-/// <summary>Maps Serilog level text (<c>{Level:u3}</c>, <c>{Level:w3}</c>, <c>{Level:u1}</c>, full names) to <see cref="LogLevel"/>.</summary>
+/// <summary>
+/// Maps level text to <see cref="LogLevel"/> (FR-F4), ignoring case: Serilog's (<c>{Level:u3}</c>, <c>{Level:w3}</c>, <c>{Level:u1}</c>, full
+/// names), NLog's (<c>Trace</c>, <c>Info</c>, <c>Warn</c>), log4net's (also <c>NOTICE</c>, <c>SEVERE</c>, <c>CRITICAL</c>, <c>ALERT</c>,
+/// <c>EMERGENCY</c>, <c>FINE</c> …) and Microsoft.Extensions.Logging's (<c>trce</c>, <c>dbug</c>, <c>fail</c>, <c>crit</c>).
+/// </summary>
 public static class LogLevelParser
 {
     public static LogLevel Parse(ReadOnlySpan<char> text)
@@ -19,7 +23,7 @@ public static class LogLevelParser
 
     private static LogLevel ParseSingle(char c) => char.ToUpperInvariant(c) switch
     {
-        'V' => LogLevel.Verbose,
+        'V' or 'T' => LogLevel.Verbose,
         'D' => LogLevel.Debug,
         'I' => LogLevel.Information,
         'W' => LogLevel.Warning,
@@ -60,6 +64,11 @@ public static class LogLevelParser
             return LogLevel.Fatal;
         }
 
+        if (text.Equals("TRC", StringComparison.OrdinalIgnoreCase))
+        {
+            return LogLevel.Verbose;
+        }
+
         return ParseFull(text);
     }
 
@@ -95,6 +104,39 @@ public static class LogLevelParser
             return LogLevel.Fatal;
         }
 
+        return ParseSynonym(text);
+    }
+
+    /// <summary>Level names other loggers use.</summary>
+    private static LogLevel ParseSynonym(ReadOnlySpan<char> text)
+    {
+        foreach (var (name, level) in Synonyms)
+        {
+            if (text.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return level;
+            }
+        }
+
         return LogLevel.Unknown;
     }
+
+    private static readonly (string Name, LogLevel Level)[] Synonyms =
+    [
+        ("Info", LogLevel.Information),
+        ("Warn", LogLevel.Warning),
+        ("Trace", LogLevel.Verbose),
+        ("trce", LogLevel.Verbose),
+        ("Finest", LogLevel.Verbose),
+        ("Finer", LogLevel.Verbose),
+        ("Fine", LogLevel.Debug),
+        ("dbug", LogLevel.Debug),
+        ("Notice", LogLevel.Information),
+        ("fail", LogLevel.Error),
+        ("Severe", LogLevel.Error),
+        ("Critical", LogLevel.Fatal),
+        ("crit", LogLevel.Fatal),
+        ("Alert", LogLevel.Fatal),
+        ("Emergency", LogLevel.Fatal),
+    ];
 }

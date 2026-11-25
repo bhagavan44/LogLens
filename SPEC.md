@@ -62,23 +62,32 @@ statistics and export work on the common `LogEvent` model and never special-case
 | F2 | Serilog compact JSON / CLEF | `{"@t":"2026-11-13T04:45:32.123Z","@mt":"Order {Id} shipped","@l":"Information","Id":42}` | v1.x structured formats |
 | F3 | Serilog classic JSON | `{"Timestamp":"…","Level":"Information","MessageTemplate":"…","Properties":{…}}` | v1.x structured formats |
 | F4 | Custom Serilog output templates | `{Timestamp:HH:mm:ss} {Level:u3} {SourceContext} {Message}` | v1.x structured formats |
-| F5 | Other loggers (NLog, log4net, Microsoft.Extensions.Logging console, custom regex) | — | Later |
+| F5 | NLog text (default layout, or a custom layout) | `2026-11-13 08:00:04.8884\|WARN\|Shop.Payments\|Retry 2/3` | v1.x other loggers |
+| F6 | log4net text (the usual conversion pattern, or a custom one) | `2026-11-13 08:00:04,888 [12] WARN  Shop.Payments - Retry 2/3` | v1.x other loggers |
+| F7 | Custom regular expression with named groups | `(?<timestamp>…) (?<level>\w+) (?<message>.*)` | v1.x other loggers |
+| F8 | Microsoft.Extensions.Logging console and other loggers | — | Later |
 
 ### 2.1 Detection and parsing
 
 - **FR-F1** Each file is read by one format, detected per file from its first ~50 non-empty lines
-  (the format recognising the most lines wins; JSON formats, then custom templates, then the default
-  template on a tie; the default template when nothing matches). The user can override it per tab
+  (the format recognising the most lines wins; on a tie JSON formats, then custom formats, then NLog, then
+  log4net, then the default Serilog template; the default template when nothing matches). The user can
+  override it per tab
   (*View ▸ Format*); the choice is remembered with the tab. A live log that starts empty is detected
   from its first complete line; the next file of a rolling log keeps the detected format.
-- **FR-F2** Plain-text parsing is template-driven: an output template is compiled to a regular
-  expression. The default Serilog template is built in; users add their own templates in Settings,
-  with a test line that shows what a template reads. Any property token (`{SourceContext}`,
-  `{ThreadId}` …) becomes a property of the event; `{Properties}` is not supported.
+- **FR-F2** Plain-text parsing is template-driven: a Serilog output template, an NLog layout or a
+  log4net conversion pattern is compiled to a regular expression for the first line of an event, or the
+  user gives that expression directly (named groups `timestamp` or `date` + `time`, `message`, optional
+  `level` and `exception`). Serilog's default template, NLog's default layout and log4net's usual pattern
+  are built in; users add their own formats of any of these kinds in Settings, with a test line that shows
+  what a format reads. Any property token (`{SourceContext}`, `${threadid}`, `%property{RequestId}`, a
+  named group …) becomes a property of the event; the logger (`${logger}`, `%logger`, group `logger`) is
+  the `SourceContext` property. Serilog's `{Properties}` is not supported.
 - **FR-F3** **Multi-line events** (messages with newlines, stack traces) attach to the preceding
   event: any line that doesn't match the start-of-event pattern is a continuation line.
 - **FR-F4** Level mapping accepts full names (`Information`) and abbreviations (`INF`, `I`),
-  case-insensitive. Unknown levels are kept verbatim and shown with a neutral colour.
+  case-insensitive, and other loggers' names (`TRACE`, `INFO`, `WARN`, `NOTICE`, `SEVERE`, `CRITICAL`,
+  `trce`, `fail` …). Unknown levels are kept verbatim and shown with a neutral colour.
 - **FR-F5** Lines that fail to parse are never dropped silently: they are shown as an *Unparsed*
   event carrying the raw text, which can be hidden.
 - **FR-F6** Encoding: UTF-8 (with or without BOM) by default; UTF-16 detected by BOM.
@@ -88,7 +97,8 @@ statistics and export work on the common `LogEvent` model and never special-case
 > **Plain-text applicability.** For F1 files the grid shows Time, Level, Message and Source (file);
 > the query bar supports `@l`, `@t`, `@m`, `@x` and text operators; statistics group by a
 > *normalised message* (numbers, GUIDs and quoted values replaced by placeholders). Property-based
-> features (properties pane, property filters, a *Source Context* column) need a structured format.
+> features (properties pane, property filters, a *Source Context* column) need a format that writes
+> properties: JSON, or a template, layout, pattern or expression that names some.
 
 ### 3.1 Opening files
 

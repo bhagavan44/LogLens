@@ -92,13 +92,13 @@
             <ToggleSwitch x:Name="RestoreSessionSwitch" Header="Reopen last time's tabs when LogLens starts" />
             <ToggleSwitch x:Name="TailSwitch" Header="Show new events as they are written (Tail) as soon as a file opens" />
 
-            <!-- ===== Formats: custom output templates (FR-F1, FR-F2) ===== -->
+            <!-- ===== Formats: custom formats (FR-F1, FR-F2, F5) ===== -->
             <TextBlock Text="Formats" Style="{StaticResource SectionHeader}" AutomationProperties.HeadingLevel="Level2" />
             <TextBlock Style="{StaticResource Hint}"
-                       Text="LogLens recognises Serilog text (the default template), compact JSON (CLEF) and classic JSON by itself. If your app writes text logs with its own output template, add it here: it is tried when a file opens and offered under View ▸ Format. Property tokens such as {SourceContext} or {ThreadId} become properties you can filter on." />
+                       Text="LogLens recognises Serilog text (the default template), compact JSON (CLEF), classic JSON, NLog's default layout and log4net's usual pattern by itself. If your app writes text logs another way, add its Serilog output template, NLog layout or log4net conversion pattern here, or a regular expression with named groups (timestamp, level, message; any other group becomes a property). Custom formats are tried when a file opens and offered under View ▸ Format. Properties such as {SourceContext}, ${threadid} or %thread can be filtered on." />
             <StackPanel x:Name="TemplatesPanel" Spacing="12" />
-            <TextBlock x:Name="NoTemplatesText" Text="No custom templates yet." Style="{StaticResource Hint}" />
-            <Button Content="Add template" Click="OnAddTemplateClick" AutomationProperties.Name="Add custom output template" />
+            <TextBlock x:Name="NoTemplatesText" Text="No custom formats yet." Style="{StaticResource Hint}" />
+            <Button Content="Add format" Click="OnAddTemplateClick" AutomationProperties.Name="Add custom format" />
 
             <!-- ===== Hide rules (FR-S6) ===== -->
             <TextBlock Text="Hide rules" Style="{StaticResource SectionHeader}" AutomationProperties.HeadingLevel="Level2" />

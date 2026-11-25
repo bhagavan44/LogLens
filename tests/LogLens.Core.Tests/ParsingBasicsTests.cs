@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using LogLens.Core.Formats;
 using LogLens.Core.Formats.SerilogText;
+using LogLens.Core.Formats.Text;
 using LogLens.Core.Models;
 
 namespace LogLens.Core.Tests;
@@ -118,6 +119,50 @@ public class TimestampFormatTests
 
         Assert.Equal(TimeZoneInfo.Local.GetUtcOffset(new DateTime(2026, 11, 13, 8, 0, 0)), value.Offset);
     }
+
+    [Fact]
+    public void Universal_parser_reads_text_without_an_offset_as_utc()
+    {
+        Assert.True(TimestampFormat.CreateParser("yyyy-MM-dd HH:mm:ss", universal: true)("2026-11-13 08:00:00", out var value));
+
+        Assert.Equal(new DateTimeOffset(2026, 11, 13, 8, 0, 0, TimeSpan.Zero), value);
+    }
+
+    [Theory]
+    [InlineData("2026-11-13 08:00:05.301", 301)]
+    [InlineData("2026-11-13 08:00:05,301", 301)]
+    [InlineData("2026-11-13T08:00:05.3010000", 301)]
+    [InlineData("13 Nov 2026 08:00:05,301", 301)]
+    [InlineData(" 2026/11/13 08:00:05 ", 0)]
+    public void Any_parser_reads_common_date_and_time_text(string text, int milliseconds)
+    {
+        Assert.True(TimestampFormat.TryParseAny(text, out var value));
+
+        Assert.Equal(new DateTime(2026, 11, 13, 8, 0, 5, milliseconds), value.DateTime);
+    }
+
+    [Fact]
+    public void Any_parser_keeps_an_offset_and_rejects_text_that_is_no_time()
+    {
+        Assert.True(TimestampFormat.TryParseAnyUniversal("2026-11-13T08:00:05+05:30", out var withOffset));
+        Assert.Equal(TimeSpan.FromHours(5.5), withOffset.Offset);
+        Assert.True(TimestampFormat.TryParseAnyUniversal("2026-11-13 08:00:05", out var utc));
+        Assert.Equal(TimeSpan.Zero, utc.Offset);
+
+        Assert.False(TimestampFormat.TryParseAny("order 42", out _));
+        Assert.False(TimestampFormat.TryParseAny("", out _));
+    }
+
+    [Theory]
+    [InlineData("yyyy-MM-dd HH:mm:ss", true)]
+    [InlineData("HH:mm:ss.fff", true)]
+    [InlineData("O", true)]
+    [InlineData("dd MMM yyyy", true)]
+    [InlineData("ddd dd MMM", false)]
+    [InlineData("MMM dd HH:mm", false)]
+    [InlineData("'at' HH:mm", false)]
+    public void Knows_whether_a_format_starts_with_a_digit(string format, bool expected)
+        => Assert.Equal(expected, TimestampFormat.StartsWithDigit(format));
 }
 
 public class OutputTemplateTests

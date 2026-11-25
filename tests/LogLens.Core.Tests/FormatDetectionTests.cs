@@ -65,7 +65,7 @@ public class FormatDetectionTests
             new CustomTemplate(" ", CustomTemplateText),            // no name: left out
         ]);
 
-        Assert.Equal(["clef", "serilog-json", "template:Shop", "serilog-text"], catalog.All.Select(f => f.Id));
+        Assert.Equal(["clef", "serilog-json", "template:Shop", "nlog", "log4net", "serilog-text"], catalog.All.Select(f => f.Id));
         var custom = Assert.Single(catalog.Custom);
         Assert.Equal("Shop", custom.DisplayName);
         Assert.Same(custom, catalog.Find("template:Shop"));

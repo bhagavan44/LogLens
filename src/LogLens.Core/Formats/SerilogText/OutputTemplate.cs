@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using LogLens.Core.Formats.Text;
 
 namespace LogLens.Core.Formats.SerilogText;
 
@@ -27,31 +28,36 @@ public sealed class OutputTemplate
     private OutputTemplate(string text, Regex startOfEvent, string timestampFormat, bool startsWithDigit, IReadOnlyList<string> propertyNames)
     {
         Text = text;
-        StartOfEvent = startOfEvent;
         TimestampFormat = timestampFormat;
-        StartsWithDigit = startsWithDigit;
-        PropertyNames = propertyNames;
-        ParseTimestamp = SerilogText.TimestampFormat.CreateParser(timestampFormat);
+        Pattern = new LinePattern(
+            startOfEvent,
+            [new TimestampField("ts", timestampFormat)],
+            levelGroup: "lvl",
+            messageGroup: "msg",
+            exceptionGroup: null,
+            [.. propertyNames.Select((name, i) => (name, "p" + i.ToString(CultureInfo.InvariantCulture)))],
+            startsWithDigit);
     }
 
     public static OutputTemplate Default { get; } = Parse(DefaultText);
 
     public string Text { get; }
 
+    /// <summary>The event lines the template writes, as the plain-text parser reads them.</summary>
+    public LinePattern Pattern { get; }
+
     /// <summary>Matches the first line of an event. Named groups: <c>ts</c>, <c>lvl</c>, <c>msg</c>, and <c>p0</c>, <c>p1</c> … for <see cref="PropertyNames"/>.</summary>
-    public Regex StartOfEvent { get; }
+    public Regex StartOfEvent => Pattern.StartOfEvent;
 
     public string TimestampFormat { get; }
 
     /// <summary>True when an event line must begin with a digit, which lets the parser reject most continuation lines without running the regex.</summary>
-    public bool StartsWithDigit { get; }
+    public bool StartsWithDigit => Pattern.StartsWithDigit;
 
     /// <summary>The properties the template writes on an event's first line, in order; group <c>p<em>i</em></c> captures the <em>i</em>-th.</summary>
-    public IReadOnlyList<string> PropertyNames { get; }
+    public IReadOnlyList<string> PropertyNames => Pattern.PropertyNames;
 
-    public bool HasSourceContext => PropertyNames.Contains(Models.LogEvent.SourceContextProperty);
-
-    internal SerilogText.TimestampFormat.TimestampParser ParseTimestamp { get; }
+    public bool HasSourceContext => Pattern.HasSourceContext;
 
     /// <exception cref="FormatException">The template is malformed, lacks Timestamp/Level/Message, or uses an unsupported token.</exception>
     public static OutputTemplate Parse(string template)
@@ -109,10 +115,10 @@ public sealed class OutputTemplate
                 {
                     case "Timestamp":
                         timestampFormat = format ?? "O";
-                        pattern.Append("(?<ts>").Append(SerilogText.TimestampFormat.ToRegex(timestampFormat)).Append(')');
+                        pattern.Append("(?<ts>").Append(Formats.Text.TimestampFormat.ToRegex(timestampFormat)).Append(')');
                         if (firstToken)
                         {
-                            startsWithDigit = StartsWithNumericField(timestampFormat);
+                            startsWithDigit = Formats.Text.TimestampFormat.StartsWithDigit(timestampFormat);
                         }
 
                         break;
@@ -216,19 +222,5 @@ public sealed class OutputTemplate
         // u3 / w3 / t3 / u1 ... or u / w / t (full name)
         var width = format.Length > 1 && int.TryParse(format.AsSpan(1), NumberStyles.None, CultureInfo.InvariantCulture, out var n) ? n : 0;
         return width > 0 ? $"[A-Za-z]{{{width}}}" : "[A-Za-z]+";
-    }
-
-    private static bool StartsWithNumericField(string format)
-        => format is "o" or "O" or "s" || (format.Length > 0 && "yMdHhms".Contains(format[0]) && !(format[0] == 'M' && RunStartsWith(format, 'M') >= 3));
-
-    private static int RunStartsWith(string format, char c)
-    {
-        var n = 0;
-        while (n < format.Length && format[n] == c)
-        {
-            n++;
-        }
-
-        return n;
     }
 }

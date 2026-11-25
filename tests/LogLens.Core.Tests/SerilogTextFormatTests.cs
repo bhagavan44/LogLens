@@ -1,5 +1,6 @@
 using LogLens.Core.Formats;
 using LogLens.Core.Formats.SerilogText;
+using LogLens.Core.Formats.Text;
 using LogLens.Core.Models;
 
 namespace LogLens.Core.Tests;
@@ -21,8 +22,8 @@ public class SerilogTextFormatTests
     [Fact]
     public void Registry_offers_the_built_in_formats_with_serilog_text_as_the_default()
     {
-        Assert.Equal([LogFormats.Clef, LogFormats.SerilogJson, LogFormats.SerilogText], LogFormats.All);
-        Assert.Equal(["clef", "serilog-json", "serilog-text"], LogFormats.All.Select(f => f.Id));
+        Assert.Equal([LogFormats.Clef, LogFormats.SerilogJson, LogFormats.NLog, LogFormats.Log4Net, LogFormats.SerilogText], LogFormats.All);
+        Assert.Equal(["clef", "serilog-json", "nlog", "log4net", "serilog-text"], LogFormats.All.Select(f => f.Id));
 
         var format = LogFormats.Default;
         Assert.Same(LogFormats.SerilogText, format);
@@ -58,7 +59,7 @@ public class SerilogTextFormatTests
     [Fact]
     public void A_partial_last_line_is_held_back_until_its_newline_arrives()
     {
-        var parser = new SerilogTextParser();
+        var parser = new TextLogParser();
 
         var first = parser.Append("2026-11-13 08:00:00.012 +05:30 [INF] one\n2026-11-13 08:00:01.000 +05:30 [ERR] tw");
 

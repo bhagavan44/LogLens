@@ -122,7 +122,7 @@ public class LogViewModelFilterTests
         await vm.WhenSettledAsync();
         Assert.Equal(3, vm.View.Count); // Warning, Error, Fatal
 
-        vm.QueryText = "@l >= 'Info'"; // not a level: broken
+        vm.QueryText = "@l >= 'Loud'"; // not a level: broken
         vm.LevelToggles.Single(t => t.Level == LogLevel.Fatal).IsOn = false;
         await vm.WhenSettledAsync();
 

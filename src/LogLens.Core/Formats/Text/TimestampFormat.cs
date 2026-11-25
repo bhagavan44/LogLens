@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace LogLens.Core.Formats.SerilogText;
+namespace LogLens.Core.Formats.Text;
 
 /// <summary>
 /// Turns a .NET date/time format string (as used in <c>{Timestamp:format}</c>) into a regular-expression fragment
@@ -95,14 +95,55 @@ public static class TimestampFormat
     }
 
     /// <summary>
-    /// Creates a parser for text written with <paramref name="format"/>. Text without an offset is assumed to be local time.
-    /// The default format takes a hand-written fast path (about 10× quicker than <c>TryParseExact</c>).
+    /// Creates a parser for text written with <paramref name="format"/>. Text without an offset is local time, or UTC when
+    /// <paramref name="universal"/>. The default format takes a hand-written fast path (about 10× quicker than <c>TryParseExact</c>).
     /// </summary>
-    public static TimestampParser CreateParser(string format)
-        => format == Default ? ParseDefault : (ReadOnlySpan<char> text, out DateTimeOffset value) =>
-            DateTimeOffset.TryParseExact(text, format, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out value);
+    public static TimestampParser CreateParser(string format, bool universal = false)
+    {
+        if (format == Default)
+        {
+            return ParseDefault;
+        }
+
+        var styles = universal ? DateTimeStyles.AssumeUniversal : DateTimeStyles.AssumeLocal;
+        return (ReadOnlySpan<char> text, out DateTimeOffset value) =>
+            DateTimeOffset.TryParseExact(text, format, CultureInfo.InvariantCulture, styles, out value);
+    }
 
     public delegate bool TimestampParser(ReadOnlySpan<char> text, out DateTimeOffset value);
+
+    /// <summary>
+    /// Reads date and time text of no known format (a custom regular expression's timestamp group): ISO 8601 with or without <c>T</c> and offset,
+    /// <c>2026-11-13 08:00:05,301</c> (a comma before the fraction, as log4net writes), <c>13 Nov 2026 08:00:05</c>, <c>11/13/2026 08:00</c> … Text
+    /// without an offset is local time.
+    /// </summary>
+    public static bool TryParseAny(ReadOnlySpan<char> text, out DateTimeOffset value) => TryParseAny(text, DateTimeStyles.AssumeLocal, out value);
+
+    /// <summary>As <see cref="TryParseAny(ReadOnlySpan{char}, out DateTimeOffset)"/>, but text without an offset is UTC.</summary>
+    public static bool TryParseAnyUniversal(ReadOnlySpan<char> text, out DateTimeOffset value) => TryParseAny(text, DateTimeStyles.AssumeUniversal, out value);
+
+    private static bool TryParseAny(ReadOnlySpan<char> text, DateTimeStyles styles, out DateTimeOffset value)
+    {
+        value = default;
+        text = text.Trim();
+        if (text.Length is 0 or > 64)
+        {
+            return false;
+        }
+
+        // "08:00:05,301" -> "08:00:05.301": a comma between the seconds and their fraction.
+        Span<char> buffer = stackalloc char[text.Length];
+        text.CopyTo(buffer);
+        for (var i = 3; i < buffer.Length - 1; i++)
+        {
+            if (buffer[i] == ',' && buffer[i - 3] == ':' && char.IsAsciiDigit(buffer[i - 1]) && char.IsAsciiDigit(buffer[i + 1]))
+            {
+                buffer[i] = '.';
+            }
+        }
+
+        return DateTimeOffset.TryParse(buffer, CultureInfo.InvariantCulture, styles | DateTimeStyles.AllowWhiteSpaces, out value);
+    }
 
     private static bool ParseDefault(ReadOnlySpan<char> s, out DateTimeOffset value)
     {
@@ -160,6 +201,11 @@ public static class TimestampFormat
 
         return true;
     }
+
+    /// <summary>True when text written with <paramref name="format"/> always begins with a digit (no day or month name, no literal first).</summary>
+    public static bool StartsWithDigit(string format)
+        => format is "o" or "O" or "s"
+           || (format.Length > 0 && "yMdHhmsf".Contains(format[0]) && !(format[0] is 'M' or 'd' && RunLength(format, 0) >= 3));
 
     private static int RunLength(string format, int index)
     {
