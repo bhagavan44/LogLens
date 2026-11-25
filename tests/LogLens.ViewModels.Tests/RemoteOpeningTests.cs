@@ -26,7 +26,7 @@ public sealed class RemoteOpeningTests
         }
     }
 
-    private static MainViewModel Main(FakeStreams streams, FakeConnector connector, MemoryStateStore? store = null)
+    private static MainViewModel NewMain(FakeStreams streams, FakeConnector connector, MemoryStateStore? store = null)
     {
         store ??= new MemoryStateStore();
         return new MainViewModel(streams, new RecentFilesService(store), new SessionService(store), new BookmarkService(store), remote: connector);
@@ -38,7 +38,7 @@ public sealed class RemoteOpeningTests
         var streams = new FakeStreams();
         streams.Returns(Remote1);
         var connector = new FakeConnector();
-        var vm = Main(streams, connector);
+        var vm = NewMain(streams, connector);
 
         await vm.OpenAsync([Remote1, Local]);
 
@@ -52,7 +52,7 @@ public sealed class RemoteOpeningTests
     {
         var streams = new FakeStreams();
         streams.Returns(Remote1);
-        var vm = Main(streams, new FakeConnector { Result = new RemoteConnectResult(false, Cancelled: true) });
+        var vm = NewMain(streams, new FakeConnector { Result = new RemoteConnectResult(false, Cancelled: true) });
 
         await vm.OpenAsync([Remote1]);
 
@@ -67,7 +67,7 @@ public sealed class RemoteOpeningTests
     public Task A_host_that_cant_be_reached_is_an_error_with_the_reason() => UiThread.Run(async () =>
     {
         var streams = new FakeStreams();
-        var vm = Main(streams, new FakeConnector { Result = new RemoteConnectResult(false, Problem: "web01 refused the connection on port 22.") });
+        var vm = NewMain(streams, new FakeConnector { Result = new RemoteConnectResult(false, Problem: "web01 refused the connection on port 22.") });
 
         await vm.OpenAsync([Remote1]);
 
@@ -85,7 +85,7 @@ public sealed class RemoteOpeningTests
         streams.Returns(Remote2, TestSupport.Lines(3, 4));
         streams.Returns(Local, TestSupport.Lines(5, 6));
         var connector = new FakeConnector();
-        var vm = Main(streams, connector);
+        var vm = NewMain(streams, connector);
 
         await vm.OpenMergedAsync([Remote1, Remote2, Local]);
 
@@ -102,7 +102,7 @@ public sealed class RemoteOpeningTests
         var streams = new FakeStreams();
         streams.Returns(Remote1);
         var connector = new FakeConnector();
-        var vm = Main(streams, connector, store);
+        var vm = NewMain(streams, connector, store);
 
         await vm.RestoreSessionAsync();
 

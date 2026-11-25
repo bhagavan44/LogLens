@@ -72,6 +72,12 @@
                         <KeyboardAccelerator Modifiers="Control,Shift" Key="O" />
                     </MenuFlyoutItem.KeyboardAccelerators>
                 </MenuFlyoutItem>
+                <MenuFlyoutItem Text="Open from remote host…" Click="OnOpenRemote">
+                    <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE968;" /></MenuFlyoutItem.Icon>
+                    <MenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Modifiers="Control,Shift" Key="R" />
+                    </MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
                 <MenuFlyoutItem Text="Merge files into one view…" Click="OnMergeFiles" />
                 <!-- FR-O1: filled from MainViewModel.RecentFiles. -->
                 <MenuFlyoutSubItem x:Name="RecentMenu" Text="Recent files">
@@ -225,7 +231,7 @@
 
         <Grid Grid.Row="3">
             <views:EmptyStateView x:Name="EmptyState" OpenRequested="OnEmptyStateOpen" OpenFolderRequested="OnEmptyStateOpenFolder"
-                                  RecentFileRequested="OnRecentFileRequested" />
+                                  OpenRemoteRequested="OnEmptyStateOpenRemote" RecentFileRequested="OnRecentFileRequested" />
             <ContentControl x:Name="LogHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" IsTabStop="False" />
 
             <!-- Shown until a file being opened has its first rows; the open tabs stay meanwhile and the open can be cancelled. -->

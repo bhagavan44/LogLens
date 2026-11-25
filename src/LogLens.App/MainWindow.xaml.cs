@@ -34,6 +34,8 @@ public sealed partial class MainWindow : Window
     private readonly SettingsService _settings;
     private readonly AppPaths _paths;
     private readonly Serilog.ILogger _log;
+    private readonly Infrastructure.Remote.SftpConnections _remote;
+    private readonly Infrastructure.Remote.IHostKeyTrust _hostKeys;
     private LogViewModel? _observedLog;
     private bool _syncingTabs;
     private string _folderPatterns = FolderScanner.DefaultPatterns;
@@ -41,12 +43,21 @@ public sealed partial class MainWindow : Window
     // What the Time column shows (View ▸ Time column, FR-G5). Not saved: every start shows timestamps again.
     private TimeColumnMode _timeMode = TimeColumnMode.Timestamp;
 
-    public MainWindow(MainViewModel viewModel, SettingsService settings, AppPaths paths, Serilog.ILogger log)
+    public MainWindow(
+        MainViewModel viewModel,
+        SettingsService settings,
+        AppPaths paths,
+        Serilog.ILogger log,
+        Infrastructure.Remote.SftpConnections remote,
+        Infrastructure.Remote.IHostKeyTrust hostKeys)
     {
         ViewModel = viewModel;
         _settings = settings;
         _paths = paths;
         _log = log;
+        _remote = remote;
+        _hostKeys = hostKeys;
+        Closed += (_, _) => _remote.Dispose(); // closes the SSH connections; the passwords held for reconnecting go with them
         InitializeComponent();
 
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));

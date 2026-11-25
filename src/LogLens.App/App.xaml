@@ -8,6 +8,12 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- Error text in dialogs built in code (SSH questions): the brush comes through a style so it follows the dialog's theme. -->
+            <Style x:Key="ErrorTextStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -55,6 +55,7 @@ public sealed partial class MainWindow
         {
             ("Ctrl+O", "Open files"),
             ("Ctrl+Shift+O", "Open folder"),
+            ("Ctrl+Shift+R", "Open from remote host"),
             ("Ctrl+W", "Close tab"),
             ("Ctrl+Tab / Ctrl+Shift+Tab", "Next / previous tab"),
             ("Ctrl+S", "Export events"),
