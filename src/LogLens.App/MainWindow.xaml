@@ -136,7 +136,11 @@
                         <KeyboardAccelerator Modifiers="Control" Key="T" />
                     </ToggleMenuFlyoutItem.KeyboardAccelerators>
                 </ToggleMenuFlyoutItem>
-                <ToggleMenuFlyoutItem x:Name="PauseItem" Text="Pause tail" Click="OnPauseClick" IsEnabled="False" />
+                <ToggleMenuFlyoutItem x:Name="PauseItem" Text="Pause tail" Click="OnPauseClick" IsEnabled="False">
+                    <ToggleMenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Modifiers="Control,Shift" Key="P" />
+                    </ToggleMenuFlyoutItem.KeyboardAccelerators>
+                </ToggleMenuFlyoutItem>
                 <ToggleMenuFlyoutItem x:Name="FollowRolledItem" Text="Follow the next file of a rolling log" Click="OnFollowRolledClick" IsEnabled="False" />
                 <MenuFlyoutSeparator />
                 <MenuFlyoutItem x:Name="RefreshItem" Text="Refresh" Click="OnRefreshClick" IsEnabled="False">

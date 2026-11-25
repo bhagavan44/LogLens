@@ -68,6 +68,7 @@ public sealed partial class MainWindow
             ("Ctrl+F2", "Toggle bookmark"),
             ("F2 / Shift+F2", "Next / previous bookmark"),
             ("Ctrl+T", "Tail: show new events as they are written"),
+            ("Ctrl+Shift+P", "Pause / resume the tail"),
             ("F5", "Refresh: read what was written since"),
             ("↑ ↓ PgUp PgDn Home End", "Move through events (Shift extends the selection)"),
             ("Ctrl+A", "Select all events"),

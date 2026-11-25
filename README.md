@@ -142,7 +142,7 @@ in a merged view of that file.
 
 **Tail** (Ctrl+T, or the *Tail* button) shows new events as they are written, within a second. The list
 follows the newest event while it is in view; scroll up to read and the new events are counted in an
-*N new events* button that takes you back down. *Pause* holds new events back so the list stays still,
+*N new events* button that takes you back down. *Pause* (Ctrl+Shift+P) holds new events back so the list stays still,
 and shows them all when you resume. Filters and the find bar apply to new events too.
 
 A **rolling log** (`log20261113.txt` → `log20261114.txt`, or `app-001.log` → `app-002.log`) is followed
@@ -155,6 +155,7 @@ With tail off, **Refresh** (F5) reads what was written since the file was last r
 | Shortcut | Action |
 |---|---|
 | Ctrl+T | Tail on / off |
+| Ctrl+Shift+P | Pause / resume the tail |
 | F5 | Refresh (with tail off) |
 
 Files are read as UTF-8, or UTF-16 when they start with a byte-order mark.
