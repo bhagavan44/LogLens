@@ -1,0 +1,17 @@
+2026-11-13 08:00:00,012 [1] INFO  Shop.Program - Application starting up
+2026-11-13 08:00:00,348 [1] DEBUG Shop.Configuration - Loaded configuration from appsettings.json
+2026-11-13 08:00:01,120 [1] INFO  Microsoft.Hosting.Lifetime - Now listening on: http://localhost:5000
+2026-11-13 08:00:04,634 [12] INFO  Shop.Api.RequestLogging - HTTP GET /api/orders/32131 responded 200 in 810 ms
+2026-11-13 08:00:04,750 [7] INFO  Shop.Orders.OrderHandler - Order 65083 shipped to customer 1204
+2026-11-13 08:00:04,888 [12] WARN  Shop.Payments.PaymentService - Retry 2/3 for payment gateway after timeout of 664 ms
+2026-11-13 08:00:05,301 [12] ERROR Shop.Payments.PaymentService - Payment failed for order 67204
+System.InvalidOperationException: Sequence contains no matching element
+   at System.Linq.ThrowHelper.ThrowNoMatchException()
+   at Shop.Payments.PaymentService.Charge(Order order) in C:\src\Shop\Payments\PaymentService.cs:line 87
+2026-11-13 08:00:05,959 [Cache Worker] DEBUG Shop.Catalog.ProductCache - Cache hit for key product:84528
+2026-11-13 08:00:06,177 [1] INFO  Shop.Program - Message with an embedded newline:
+this second line is part of the same event
+2026-11-13 08:00:07,410 [9] FATAL Shop.Inventory.SyncJob - Unhandled exception in worker SyncInventory; shutting down
+System.OutOfMemoryException: Exception of type 'System.OutOfMemoryException' was thrown.
+   at Shop.Inventory.SyncJob.Run() in C:\src\Shop\Inventory\SyncJob.cs:line 112
+2026-11-13 08:00:07,512 [1] INFO  Shop.Program - Application stopped

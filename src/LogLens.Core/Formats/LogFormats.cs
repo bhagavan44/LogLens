@@ -1,11 +1,15 @@
 using LogLens.Core.Formats.Json;
+using LogLens.Core.Formats.Log4Net;
+using LogLens.Core.Formats.NLog;
 using LogLens.Core.Formats.SerilogText;
+using LogLens.Core.Formats.Text;
 
 namespace LogLens.Core.Formats;
 
 /// <summary>
-/// The built-in formats (SPEC §2): Serilog's plain text with the default template (F1), compact JSON / CLEF (F2) and classic JSON (F3).
-/// Custom output templates (FR-F2) join them in a <see cref="FormatCatalog"/>.
+/// The built-in formats (SPEC §2): Serilog's plain text with the default template (F1), compact JSON / CLEF (F2), classic JSON (F3), and the
+/// text written by NLog's default layout and log4net's usual conversion pattern (F5). Custom formats (FR-F2) join them in a
+/// <see cref="FormatCatalog"/>.
 /// </summary>
 public static class LogFormats
 {
@@ -15,8 +19,14 @@ public static class LogFormats
 
     public static ILogFormat SerilogJson { get; } = new SerilogJsonFormat();
 
+    /// <summary>NLog's file target with its default layout, <see cref="NLogLayout.DefaultText"/>.</summary>
+    public static ILogFormat NLog { get; } = new TextLogFormat("nlog", "NLog text", NLogLayout.Default);
+
+    /// <summary>log4net's <c>PatternLayout</c> with the usual conversion pattern, <see cref="Log4NetPattern.DefaultText"/>.</summary>
+    public static ILogFormat Log4Net { get; } = new TextLogFormat("log4net", "log4net text", Log4NetPattern.Default);
+
     /// <summary>The built-in formats, in the order detection prefers them when several recognise the same lines.</summary>
-    public static IReadOnlyList<ILogFormat> All { get; } = [Clef, SerilogJson, SerilogText];
+    public static IReadOnlyList<ILogFormat> All { get; } = [Clef, SerilogJson, NLog, Log4Net, SerilogText];
 
     /// <summary>The format used when nothing else is known about a file.</summary>
     public static ILogFormat Default => SerilogText;

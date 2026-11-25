@@ -20,6 +20,9 @@
     <None Include="..\..\samples\serilog-text\*.txt" LinkBase="samples\serilog-text" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\samples\serilog-clef\*.clef" LinkBase="samples\serilog-clef" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\samples\serilog-json\*.json" LinkBase="samples\serilog-json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\samples\nlog\*.log" LinkBase="samples\nlog" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\samples\log4net\*.log" LinkBase="samples\log4net" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\samples\regex\*.log" LinkBase="samples\regex" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

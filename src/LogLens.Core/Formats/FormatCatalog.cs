@@ -35,9 +35,9 @@ public sealed class FormatCatalog
             }
         }
 
-        // Detection prefers the stricter formats: JSON first, then the custom templates (a custom template usually also matches lines the
-        // default template would), and the default template last.
-        All = [LogFormats.Clef, LogFormats.SerilogJson, .. custom, LogFormats.SerilogText];
+        // Detection prefers the stricter formats: JSON first, then the custom templates (a custom template usually also matches lines a
+        // built-in text format would), then NLog and log4net, and Serilog's default template last.
+        All = [LogFormats.Clef, LogFormats.SerilogJson, .. custom, LogFormats.NLog, LogFormats.Log4Net, LogFormats.SerilogText];
         Custom = custom;
     }
 

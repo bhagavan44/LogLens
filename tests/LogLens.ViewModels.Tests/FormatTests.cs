@@ -207,8 +207,8 @@ public class FormatTests
         var catalog = new FormatCatalog([new CustomTemplate("Shop", "{Timestamp:HH:mm:ss} {Level:u3} {Message}")]);
         var vm = new MainViewModel(new FakeStreams(), new RecentFilesService(store), new SessionService(store), new BookmarkService(store), () => catalog);
 
-        Assert.Equal(["clef", "serilog-json", "template:Shop", "serilog-text"], vm.AvailableFormats.Select(f => f.Id));
-        Assert.Equal(["clef", "serilog-json", "serilog-text"], TestSupport.Main(new FakeStreams()).AvailableFormats.Select(f => f.Id));
+        Assert.Equal(["clef", "serilog-json", "template:Shop", "nlog", "log4net", "serilog-text"], vm.AvailableFormats.Select(f => f.Id));
+        Assert.Equal(["clef", "serilog-json", "nlog", "log4net", "serilog-text"], TestSupport.Main(new FakeStreams()).AvailableFormats.Select(f => f.Id));
     }
 
     [Fact]

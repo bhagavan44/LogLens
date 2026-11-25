@@ -33,6 +33,8 @@ public sealed class FormatLoadingTests : IDisposable
     [InlineData("serilog-clef", "log20261113.clef", "clef", 12)]
     [InlineData("serilog-json", "log20261113.json", "serilog-json", 7)]
     [InlineData("serilog-text", "log20261113.txt", "serilog-text", 14)]
+    [InlineData("nlog", "nlog-20261113.log", "nlog", 11)]
+    [InlineData("log4net", "log4net-20261113.log", "log4net", 11)]
     public async Task The_loader_detects_each_samples_format(string folder, string file, string formatId, int events)
     {
         var document = await new LogFileLoader().LoadAsync(Sample(folder, file));

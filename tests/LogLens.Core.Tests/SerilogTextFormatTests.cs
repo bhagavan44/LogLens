@@ -22,8 +22,8 @@ public class SerilogTextFormatTests
     [Fact]
     public void Registry_offers_the_built_in_formats_with_serilog_text_as_the_default()
     {
-        Assert.Equal([LogFormats.Clef, LogFormats.SerilogJson, LogFormats.SerilogText], LogFormats.All);
-        Assert.Equal(["clef", "serilog-json", "serilog-text"], LogFormats.All.Select(f => f.Id));
+        Assert.Equal([LogFormats.Clef, LogFormats.SerilogJson, LogFormats.NLog, LogFormats.Log4Net, LogFormats.SerilogText], LogFormats.All);
+        Assert.Equal(["clef", "serilog-json", "nlog", "log4net", "serilog-text"], LogFormats.All.Select(f => f.Id));
 
         var format = LogFormats.Default;
         Assert.Same(LogFormats.SerilogText, format);
