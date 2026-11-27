@@ -37,7 +37,7 @@
         </Grid.ColumnDefinitions>
 
         <!-- ===== Filter bar: query (FR-S4), levels (FR-S1), time window (FR-S2), quick-filter chips (FR-S5) ===== -->
-        <StackPanel Grid.ColumnSpan="2" Padding="8,8,8,6" Spacing="6">
+        <StackPanel Grid.ColumnSpan="2" Padding="8,0,8,6" Spacing="6">
             <Grid ColumnSpacing="6">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
