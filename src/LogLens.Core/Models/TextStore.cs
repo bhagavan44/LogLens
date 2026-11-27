@@ -1,16 +1,25 @@
+using System.Text;
+
 namespace LogLens.Core.Models;
 
 /// <summary>
 /// The decoded text of a log, held as a list of chunks so a growing file (progressive load, tail) never copies everything on each append.
 /// Events refer to it by absolute character offset; <see cref="Substring"/> stitches together a range that crosses a chunk boundary.
 /// </summary>
-/// <remarks>Not thread-safe: built on one thread, then only read.</remarks>
+/// <remarks>
+/// <para>
+/// A chunk that is pure ASCII (most logs) is kept as one byte per character instead of a .NET string's two (NFR-5): offsets stay the same, because
+/// each character is still one unit, and the text comes back unchanged. Any other chunk is kept as a string.
+/// </para>
+/// <para>Not thread-safe: built on one thread, then only read.</para>
+/// </remarks>
 public sealed class TextStore
 {
     // Small appends (typical while tailing) are merged into the previous chunk so the chunk list stays short.
     private const int MergeLimit = 256 * 1024;
 
-    private readonly List<string> _chunks = [];
+    // Each chunk is a string, or a byte[] holding ASCII text one byte per character.
+    private readonly List<object> _chunks = [];
     private readonly List<long> _starts = [];
     private readonly List<long> _lineStarts = [0];
     private long _indexedUpTo;
@@ -20,6 +29,9 @@ public sealed class TextStore
 
     public int ChunkCount => _chunks.Count;
 
+    /// <summary>Bytes the text takes up in memory (without the line index): one per character of an ASCII chunk, two otherwise.</summary>
+    public long StoredBytes => _chunks.Sum(c => c is byte[] bytes ? bytes.LongLength : 2L * ((string)c).Length);
+
     public void Append(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
@@ -28,13 +40,18 @@ public sealed class TextStore
             return;
         }
 
-        if (_chunks.Count > 0 && _chunks[^1].Length + text.Length <= MergeLimit)
+        if (_chunks.Count > 0 && LengthOf(_chunks[^1]) + text.Length <= MergeLimit)
         {
-            _chunks[^1] = string.Concat(_chunks[^1], text);
+            _chunks[^1] = _chunks[^1] switch
+            {
+                byte[] ascii when Ascii.IsValid(text) => Concat(ascii, text),
+                byte[] ascii => string.Concat(Encoding.ASCII.GetString(ascii), text),
+                var chunk => string.Concat((string)chunk, text),
+            };
         }
         else
         {
-            _chunks.Add(text);
+            _chunks.Add(Ascii.IsValid(text) ? Encoding.ASCII.GetBytes(text) : text);
             _starts.Add(Length);
         }
 
@@ -67,24 +84,23 @@ public sealed class TextStore
         var index = ChunkAt(start);
         var offsetInChunk = (int)(start - _starts[index]);
         var chunk = _chunks[index];
-        if (offsetInChunk + length <= chunk.Length)
+        if (offsetInChunk + length <= LengthOf(chunk))
         {
-            return chunk.Substring(offsetInChunk, length);
+            return chunk is byte[] ascii ? Encoding.ASCII.GetString(ascii, offsetInChunk, length) : ((string)chunk).Substring(offsetInChunk, length);
         }
 
-        var result = new System.Text.StringBuilder(length);
-        var remaining = length;
-        while (remaining > 0)
+        return string.Create(length, (Store: this, Index: index, Offset: offsetInChunk), static (destination, state) =>
         {
-            chunk = _chunks[index];
-            var take = Math.Min(remaining, chunk.Length - offsetInChunk);
-            result.Append(chunk, offsetInChunk, take);
-            remaining -= take;
-            offsetInChunk = 0;
-            index++;
-        }
-
-        return result.ToString();
+            var (store, index, offset) = state;
+            while (destination.Length > 0)
+            {
+                var chunk = store._chunks[index++];
+                var take = Math.Min(destination.Length, LengthOf(chunk) - offset);
+                CopyTo(chunk, offset, take, destination);
+                destination = destination[take..];
+                offset = 0;
+            }
+        });
     }
 
     /// <summary>
@@ -112,12 +128,12 @@ public sealed class TextStore
 
         for (var c = ChunkAt(_indexedUpTo); c < _chunks.Count; c++)
         {
-            var chunk = _chunks[c];
-            var pos = chunk.IndexOf('\n', (int)Math.Max(0, _indexedUpTo - _starts[c]));
+            var from = (int)Math.Max(0, _indexedUpTo - _starts[c]);
+            var pos = NextNewline(_chunks[c], from);
             while (pos >= 0)
             {
                 _lineStarts.Add(_starts[c] + pos + 1);
-                pos = chunk.IndexOf('\n', pos + 1);
+                pos = NextNewline(_chunks[c], pos + 1);
             }
         }
 
@@ -128,5 +144,38 @@ public sealed class TextStore
     {
         var index = _starts.BinarySearch(start);
         return index >= 0 ? index : ~index - 1; // the chunk that starts at or before 'start'
+    }
+
+    private static int LengthOf(object chunk) => chunk is byte[] ascii ? ascii.Length : ((string)chunk).Length;
+
+    private static int NextNewline(object chunk, int from)
+    {
+        if (chunk is byte[] ascii)
+        {
+            var at = ascii.AsSpan(from).IndexOf((byte)'\n');
+            return at < 0 ? -1 : from + at;
+        }
+
+        return ((string)chunk).IndexOf('\n', from);
+    }
+
+    private static void CopyTo(object chunk, int offset, int length, Span<char> destination)
+    {
+        if (chunk is byte[] ascii)
+        {
+            Ascii.ToUtf16(ascii.AsSpan(offset, length), destination, out _);
+        }
+        else
+        {
+            ((string)chunk).AsSpan(offset, length).CopyTo(destination);
+        }
+    }
+
+    private static byte[] Concat(byte[] ascii, string text)
+    {
+        var result = new byte[ascii.Length + text.Length];
+        ascii.CopyTo(result, 0);
+        Ascii.FromUtf16(text, result.AsSpan(ascii.Length), out _);
+        return result;
     }
 }
