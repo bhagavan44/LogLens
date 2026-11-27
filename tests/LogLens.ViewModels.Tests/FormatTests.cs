@@ -24,7 +24,7 @@ public class FormatTests
     {
         var streams = new FakeStreams();
         streams.Returns(ClefPath, ClefText, detected: LogFormats.Clef);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
         var raised = 0;
 
         await vm.OpenAsync([ClefPath]);
@@ -133,7 +133,7 @@ public class FormatTests
         streams.Returns(@"C:\logs\a.txt");
         streams.Returns(ClefPath, ClefText, detected: LogFormats.Clef);
         streams.Returns(@"C:\logs\c.txt");
-        var vm = TestSupport.Main(streams, store);
+        var vm = TestSupport.CreateMain(streams, store);
         await vm.OpenAsync([@"C:\logs\a.txt", ClefPath, @"C:\logs\c.txt"]);
         var old = vm.Tabs[1];
 
@@ -161,7 +161,7 @@ public class FormatTests
     {
         var streams = new FakeStreams();
         streams.Returns(ClefPath, ClefText, detected: LogFormats.Clef);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
         await vm.OpenAsync([ClefPath]);
         var log = vm.CurrentLog!;
 
@@ -191,7 +191,7 @@ public class FormatTests
         var streams = new FakeStreams();
         streams.Returns(ClefPath, ClefText);
         streams.Returns(@"C:\logs\a.txt");
-        var vm = TestSupport.Main(streams, store);
+        var vm = TestSupport.CreateMain(streams, store);
 
         await vm.RestoreSessionAsync();
 
@@ -208,7 +208,7 @@ public class FormatTests
         var vm = new MainViewModel(new FakeStreams(), new RecentFilesService(store), new SessionService(store), new BookmarkService(store), () => catalog);
 
         Assert.Equal(["clef", "serilog-json", "template:Shop", "nlog", "log4net", "serilog-text"], vm.AvailableFormats.Select(f => f.Id));
-        Assert.Equal(["clef", "serilog-json", "nlog", "log4net", "serilog-text"], TestSupport.Main(new FakeStreams()).AvailableFormats.Select(f => f.Id));
+        Assert.Equal(["clef", "serilog-json", "nlog", "log4net", "serilog-text"], TestSupport.CreateMain(new FakeStreams()).AvailableFormats.Select(f => f.Id));
     }
 
     [Fact]
@@ -216,7 +216,7 @@ public class FormatTests
     {
         var streams = new FakeStreams();
         streams.Returns(@"C:\logs\odd.txt", "just some text\nand more\n");
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
 
         await vm.OpenAsync([@"C:\logs\odd.txt"]);
 
@@ -228,7 +228,7 @@ public class FormatTests
     {
         var streams = new FakeStreams();
         streams.Returns(ClefPath, ClefText, detected: LogFormats.Clef);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
         await vm.OpenAsync([ClefPath]);
         return vm.CurrentLog!;
     }

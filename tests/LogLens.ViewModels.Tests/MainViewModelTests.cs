@@ -10,7 +10,7 @@ public class MainViewModelTests
     [Fact]
     public void Starts_empty()
     {
-        var vm = TestSupport.Main(new FakeStreams());
+        var vm = TestSupport.CreateMain(new FakeStreams());
 
         Assert.False(vm.HasLog);
         Assert.True(vm.ShowEmptyState);
@@ -25,7 +25,7 @@ public class MainViewModelTests
     {
         var streams = new FakeStreams();
         streams.Returns(Path1);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
 
         await vm.OpenAsync([Path1]);
 
@@ -44,7 +44,7 @@ public class MainViewModelTests
         var streams = new FakeStreams();
         streams.Returns(Path2);
         var pending = streams.Waits(Path1);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
         await vm.OpenAsync([Path2]);
 
         var open = vm.OpenAsync([Path1]);
@@ -74,7 +74,7 @@ public class MainViewModelTests
         streams.Returns(Path1);
         streams.Returns(Path2);
         streams.Returns(path3);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
 
         await vm.OpenAsync([Path1, Path2, path3]);
 
@@ -89,7 +89,7 @@ public class MainViewModelTests
         var streams = new FakeStreams();
         streams.Returns(Path1);
         streams.Returns(Path2);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
         await vm.OpenAsync([Path1, Path2]);
 
         await vm.OpenAsync([Path1.ToUpperInvariant()]);
@@ -105,7 +105,7 @@ public class MainViewModelTests
         var streams = new FakeStreams();
         var paths = Enumerable.Range(1, MainViewModel.MaxTabsPerOpen + 3).Select(i => $@"C:\logs\f{i}.txt").ToList();
         paths.ForEach(p => streams.Returns(p));
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
 
         await vm.OpenAsync(paths);
 
@@ -119,7 +119,7 @@ public class MainViewModelTests
     {
         var streams = new FakeStreams();
         streams.Returns(Path2);
-        var vm = TestSupport.Main(streams); // Path1 is missing
+        var vm = TestSupport.CreateMain(streams); // Path1 is missing
 
         await vm.OpenAsync([Path1, Path2]);
 
@@ -135,7 +135,7 @@ public class MainViewModelTests
         streams.Returns(Path1);
         streams.Returns(Path2);
         streams.Returns(path3);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
         await vm.OpenAsync([Path1, Path2, path3]);
         vm.CurrentLog = vm.Tabs[1];
 
@@ -160,7 +160,7 @@ public class MainViewModelTests
         streams.Returns(Path2);
         streams.Returns(path3);
         var store = new MemoryStateStore();
-        var vm = TestSupport.Main(streams, store);
+        var vm = TestSupport.CreateMain(streams, store);
         await vm.OpenAsync([Path1, Path2, path3]);
 
         vm.MoveTab(2, 0);
@@ -180,7 +180,7 @@ public class MainViewModelTests
         var streams = new FakeStreams();
         var background = streams.Waits(Path1);
         streams.Returns(Path2);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
         var open = vm.OpenAsync([Path1]);
         background.Load(TestSupport.Text);
         await open;
@@ -200,7 +200,7 @@ public class MainViewModelTests
         var streams = new FakeStreams();
         streams.Returns(Path1, TestSupport.Line(0) + TestSupport.Line(10));
         streams.Returns(Path2, TestSupport.Line(5));
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
 
         await vm.OpenMergedAsync([Path1, Path2]);
 
@@ -220,7 +220,7 @@ public class MainViewModelTests
         var streams = new FakeStreams();
         streams.Returns(Path1);
         streams.Returns(Path2);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
         await vm.OpenMergedAsync([Path1, Path2]);
         await vm.OpenAsync([Path1]);
 
@@ -236,7 +236,7 @@ public class MainViewModelTests
     {
         var streams = new FakeStreams();
         streams.Returns(Path1);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
 
         await vm.OpenMergedAsync([Path1, Path1]);
 
@@ -249,7 +249,7 @@ public class MainViewModelTests
     {
         var streams = new FakeStreams();
         streams.Returns(Path1);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
 
         await vm.OpenMergedAsync([Path1, Path2]);
 
@@ -269,7 +269,7 @@ public class MainViewModelTests
         var streams = new FakeStreams();
         streams.Returns(Path2);
         streams.Throws(Path1, (Exception)Activator.CreateInstance(exceptionType)!);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
         await vm.OpenAsync([Path2]);
 
         await vm.OpenAsync([Path1]);
@@ -287,7 +287,7 @@ public class MainViewModelTests
     {
         var streams = new FakeStreams();
         streams.Returns(Path1, "plain text\nnot serilog\n");
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
 
         await vm.OpenAsync([Path1]);
 
@@ -301,7 +301,7 @@ public class MainViewModelTests
     {
         var streams = new FakeStreams();
         streams.Returns(Path1, string.Empty);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
 
         await vm.OpenAsync([Path1]);
 
@@ -315,7 +315,7 @@ public class MainViewModelTests
         var streams = new FakeStreams();
         streams.Returns(Path2);
         var pending = streams.Waits(Path1);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
         await vm.OpenAsync([Path2]);
 
         var open = vm.OpenAsync([Path1]);
@@ -334,7 +334,7 @@ public class MainViewModelTests
         var streams = new FakeStreams();
         var slow = streams.Waits(Path1);
         var slower = streams.Waits(Path2);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
 
         var first = vm.OpenAsync([Path1]);
         var second = vm.OpenAsync([Path2]);
@@ -356,7 +356,7 @@ public class MainViewModelTests
     {
         var streams = new FakeStreams();
         streams.Returns(Path1);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
         await vm.OpenAsync([Path1]);
 
         vm.Close();
@@ -371,7 +371,7 @@ public class MainViewModelTests
     public async Task Opening_nothing_does_nothing()
     {
         var streams = new FakeStreams();
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
 
         await vm.OpenAsync([]);
 
@@ -382,7 +382,7 @@ public class MainViewModelTests
     [Fact]
     public void Unexpected_errors_are_reported_as_a_notice()
     {
-        var vm = TestSupport.Main(new FakeStreams());
+        var vm = TestSupport.CreateMain(new FakeStreams());
 
         vm.ReportUnexpectedError(new InvalidOperationException("bug"));
 
@@ -399,7 +399,7 @@ public class MainViewModelTests
         streams.Returns(Path1);
         streams.Returns(Path2);
         var store = new MemoryStateStore();
-        var vm = TestSupport.Main(streams, store);
+        var vm = TestSupport.CreateMain(streams, store);
         var changes = 0;
         vm.PropertyChanged += (_, e) => changes += e.PropertyName == nameof(MainViewModel.RecentFiles) ? 1 : 0;
 
@@ -418,7 +418,7 @@ public class MainViewModelTests
     public Task A_recent_file_that_is_gone_is_removed_from_the_list() => UiThread.Run(async () =>
     {
         var store = new MemoryStateStore { State = new AppState { RecentFiles = [Path1, Path2] } };
-        var vm = TestSupport.Main(new FakeStreams(), store); // every file is missing
+        var vm = TestSupport.CreateMain(new FakeStreams(), store); // every file is missing
 
         await vm.OpenAsync([Path1]);
 
@@ -434,7 +434,7 @@ public class MainViewModelTests
         var streams = new FakeStreams();
         streams.Returns(Path1);
         var store = new MemoryStateStore();
-        var vm = TestSupport.Main(streams, store);
+        var vm = TestSupport.CreateMain(streams, store);
 
         await vm.OpenAsync([Path1]);
         Assert.Equal(Path1, store.State.Session.Tabs.Single().Path);
@@ -456,7 +456,7 @@ public class MainViewModelTests
         {
             State = new AppState { Session = new SessionState { Tabs = [new SessionTab { Path = Path1, Follow = true }] } },
         };
-        var vm = TestSupport.Main(streams, store);
+        var vm = TestSupport.CreateMain(streams, store);
 
         await vm.RestoreSessionAsync();
 
@@ -474,7 +474,7 @@ public class MainViewModelTests
         streams.Returns(Path2);
         streams.Returns(path3);
         var store = new MemoryStateStore();
-        var vm = TestSupport.Main(streams, store);
+        var vm = TestSupport.CreateMain(streams, store);
 
         await vm.OpenAsync([Path1]);
         await vm.OpenMergedAsync([Path2, path3]);
@@ -506,7 +506,7 @@ public class MainViewModelTests
                 },
             },
         };
-        var vm = TestSupport.Main(streams, store);
+        var vm = TestSupport.CreateMain(streams, store);
 
         await vm.RestoreSessionAsync();
 
@@ -522,7 +522,7 @@ public class MainViewModelTests
     public async Task An_empty_session_opens_nothing()
     {
         var streams = new FakeStreams();
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
 
         await vm.RestoreSessionAsync();
 
@@ -539,7 +539,7 @@ public class MainViewModelTests
         {
             State = new AppState { Session = new SessionState { Tabs = [new SessionTab { Path = Path1 }] } },
         };
-        var vm = TestSupport.Main(streams, store);
+        var vm = TestSupport.CreateMain(streams, store);
         vm.RemembersSession = false;
 
         await vm.OpenAsync([Path2]);
@@ -554,7 +554,7 @@ public class MainViewModelTests
     {
         var streams = new FakeStreams();
         var stream = streams.Waits(Path1);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
         var open = vm.OpenAsync([Path1]);
         stream.Load(TestSupport.Text);
         await open;
@@ -570,7 +570,7 @@ public class MainViewModelTests
     {
         var streams = new FakeStreams();
         var stream = streams.Waits(Path1);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
         var open = vm.OpenAsync([Path1]);
         stream.Load(TestSupport.Text);
         await open;
