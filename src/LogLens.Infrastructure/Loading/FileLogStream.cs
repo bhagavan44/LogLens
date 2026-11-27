@@ -552,8 +552,11 @@ public sealed class FileLogStream : ILogStream
                 var lengthNow = stream.Length;
 
                 cancellationToken.ThrowIfCancellationRequested();
-                var chars = new char[_decoder!.GetCharCount(_buffer, 0, read, flush: false)];
-                var text = new string(chars, 0, _decoder.GetChars(_buffer, 0, read, chars, 0, flush: false));
+                // Decoded straight into the string: a chunk is up to 4 MB, so a char[] in between would double what each read allocates.
+                var text = string.Create(
+                    _decoder!.GetCharCount(_buffer, 0, read, flush: false),
+                    (Decoder: _decoder, Bytes: _buffer, Count: read),
+                    static (chars, state) => state.Decoder.GetChars(state.Bytes.AsSpan(0, state.Count), chars, flush: false));
                 var delta = Parser.Append(text, cancellationToken);
                 _position += read;
                 _nextChunk = (int)Math.Min((long)_nextChunk * 4, _buffer.Length);
