@@ -323,4 +323,26 @@ public class PlainTextLogParserTests
     {
         public void Report(double value) => onReport(value);
     }
+
+    [Fact]
+    public void The_same_exception_logged_again_is_held_once()
+    {
+        var text = """
+            2026-11-13 08:00:00.000 +05:30 [ERR] Payment failed
+            System.InvalidOperationException: boom
+               at Shop.Pay.Charge()
+            2026-11-13 08:00:01.000 +05:30 [ERR] Payment failed again
+            System.InvalidOperationException: boom
+               at Shop.Pay.Charge()
+            2026-11-13 08:00:02.000 +05:30 [ERR] Another failure
+            System.ArgumentException: bad
+               at Shop.Pay.Check()
+            """;
+
+        var events = new PlainTextLogParser().Parse(text).Events;
+
+        Assert.Equal("System.InvalidOperationException: boom\n   at Shop.Pay.Charge()", events[0].Exception);
+        Assert.Same(events[0].Exception, events[1].Exception);
+        Assert.Equal("System.ArgumentException: bad\n   at Shop.Pay.Check()", events[2].Exception);
+    }
 }

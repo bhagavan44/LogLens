@@ -28,6 +28,7 @@ public sealed class PlainTextLogParser
     private static readonly Regex ExceptionHeader = new("^" + ExceptionHeaderPattern, RegexOptions.CultureInvariant | RegexOptions.Compiled, TimeSpan.FromSeconds(2));
 
     private readonly LinePattern _pattern;
+    private readonly TextPool _exceptions = new(); // the same stack trace, logged again, is held once (NFR-5)
 
     /// <param name="pattern">The event lines to recognise; Serilog's default file template when null.</param>
     public PlainTextLogParser(LinePattern? pattern = null)
@@ -142,7 +143,7 @@ public sealed class PlainTextLogParser
         {
             if (state.Active)
             {
-                events.Add(state.Build(text, firstId + events.Count, sourceFile, baseOffset));
+                events.Add(state.Build(text, firstId + events.Count, sourceFile, baseOffset, _exceptions));
                 state.Reset();
             }
         }
@@ -237,7 +238,7 @@ public sealed class PlainTextLogParser
             }
         }
 
-        public readonly LogEvent Build(string text, int id, string? sourceFile, long baseOffset)
+        public readonly LogEvent Build(string text, int id, string? sourceFile, long baseOffset, TextPool exceptions)
         {
             var message = _message;
             string? exception = null;
@@ -246,11 +247,11 @@ public sealed class PlainTextLogParser
             {
                 exception = _exceptionStart < 0
                     ? _firstLineException
-                    : string.Concat(_firstLineException, "\n", text.AsSpan(_exceptionStart, _end - _exceptionStart));
+                    : exceptions.Get(string.Concat(_firstLineException, "\n", text.AsSpan(_exceptionStart, _end - _exceptionStart)));
             }
             else if (_exceptionStart >= 0)
             {
-                exception = text.Substring(_exceptionStart, _end - _exceptionStart);
+                exception = exceptions.Get(text.AsSpan(_exceptionStart, _end - _exceptionStart));
                 if (_messageContinuationStart >= 0)
                 {
                     var messageEnd = TrimEnd(text, _messageContinuationStart, _exceptionStart);
