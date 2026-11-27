@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using LogLens.Core.Filtering;
 
 namespace LogLens.Core.Formats.Text;
 
@@ -10,14 +11,12 @@ namespace LogLens.Core.Formats.Text;
 /// Named groups say what the line holds: <c>timestamp</c> (or <c>date</c> and <c>time</c>, read together) and <c>message</c> are required;
 /// <c>level</c> and <c>exception</c> are optional; <c>logger</c> is the <c>SourceContext</c> property; any other named group is a property of that
 /// name. The timestamp may be any common date and time text (<see cref="TimestampFormat.TryParseAny"/>). The expression is anchored at the start
-/// of the line and matched with a timeout (NFR-10).
+/// of the line and matched with a timeout (NFR-10); a log on which it times out too often stops trying it (<see cref="PlainTextLogParser.PatternTooSlow"/>).
 /// </remarks>
 public static class RegexLinePattern
 {
     /// <summary>An example for the template editor.</summary>
     public const string Example = @"^\[(?<timestamp>[^\]]+)\] (?<level>\w+)\s+(?<logger>\S+) :: (?<message>.*)$";
-
-    private static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(2);
 
     /// <exception cref="FormatException">The expression is invalid or lacks a timestamp or message group.</exception>
     public static LinePattern Parse(string expression)
@@ -26,7 +25,8 @@ public static class RegexLinePattern
         Regex regex;
         try
         {
-            regex = new Regex("^(?:" + expression + ")", RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture, MatchTimeout);
+            // On the linear-time engine when the expression allows, so it can't backtrack catastrophically on a line (NFR-10).
+            regex = UserRegex.Create("^(?:" + expression + ")", RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture).Regex;
         }
         catch (ArgumentException ex)
         {

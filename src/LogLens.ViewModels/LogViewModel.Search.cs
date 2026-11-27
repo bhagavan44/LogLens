@@ -48,7 +48,7 @@ public sealed partial class LogViewModel
     [ObservableProperty]
     public partial int ContextEvents { get; set; }
 
-    /// <summary>Why the find text can't be used (an invalid regular expression); null when it is fine.</summary>
+    /// <summary>Why the find text can't be used (an invalid regular expression, or one too slow on this log); null when it is fine.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSearchError))]
     public partial string? SearchError { get; private set; }
@@ -184,6 +184,22 @@ public sealed partial class LogViewModel
         SearchError = error;
     }
 
+    /// <summary>
+    /// The find expression timed out too often on this log (NFR-10): drop it like an invalid one, so it neither filters nor counts matches, and
+    /// say why. False when the find text is fine.
+    /// </summary>
+    private bool RejectSlowSearch()
+    {
+        if (CurrentMatcher is not { TooSlow: true })
+        {
+            return false;
+        }
+
+        CurrentMatcher = null;
+        SearchError = UserRegex.TooSlowMessage;
+        return true;
+    }
+
     /// <summary>Finds the matching rows of the current list on a worker thread, then refreshes "n of m" and the highlights.</summary>
     private async Task RecomputeMatchesAsync()
     {
@@ -208,7 +224,7 @@ public sealed partial class LogViewModel
                     return;
                 }
 
-                _matches = matches;
+                _matches = RejectSlowSearch() ? [] : matches;
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {

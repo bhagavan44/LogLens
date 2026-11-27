@@ -97,9 +97,13 @@ public sealed class LinePattern
     /// Reads the line <c>text[start..end]</c> as the first line of an event. False when it isn't one: no match, a timestamp that doesn't parse, or a
     /// line so pathological that the regex timed out (NFR-10).
     /// </summary>
-    internal bool TryRead(string text, int start, int end, out LineFields fields)
+    internal bool TryRead(string text, int start, int end, out LineFields fields) => TryRead(text, start, end, out fields, out _);
+
+    /// <summary>As <see cref="TryRead(string, int, int, out LineFields)"/>; <paramref name="timedOut"/> says the regex gave up on this line.</summary>
+    internal bool TryRead(string text, int start, int end, out LineFields fields, out bool timedOut)
     {
         fields = default;
+        timedOut = false;
         var length = end - start;
         if (length == 0 || (StartsWithDigit && (uint)(text[start] - '0') > 9))
         {
@@ -113,6 +117,7 @@ public sealed class LinePattern
         }
         catch (RegexMatchTimeoutException)
         {
+            timedOut = true;
             return false; // a pathological line is a continuation line, never a crash
         }
 

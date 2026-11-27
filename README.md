@@ -129,6 +129,11 @@ The **find bar** (Ctrl+F) highlights matches in the list and counts them (*3 of 
 case, whole word, regular expression, and whether to search exception text too. *Only matches*
 narrows the list to the matching events, with *Context ±* showing that many events around each.
 
+Regular expressions (in the find bar, `matches` and `like` in the query bar, hide rules and custom
+formats) never hang a log: most run on a linear-time engine. One that needs lookarounds or
+backreferences and keeps timing out on a log is reported as *too slow* and isn't applied, like a
+mistake; a hide rule that is too slow is skipped with a message.
+
 **Find all events containing** (Ctrl+Shift+F, or right-click an event) follows an order number,
 request id or user name through a log: it lists only the events whose message or exception contains
 the text, optionally with a few events around each, and clears the other filters first so nothing

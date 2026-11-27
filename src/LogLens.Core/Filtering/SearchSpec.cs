@@ -33,9 +33,8 @@ public sealed record SearchSpec(string Text, bool MatchCase = false, bool WholeW
 public sealed class SearchMatcher
 {
     private const int MaxHighlights = 64;
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(2);
 
-    private readonly Regex? _regex;
+    private readonly UserRegex? _regex;
     private readonly string _text;
     private readonly StringComparison _comparison;
     private readonly bool _includeException;
@@ -60,9 +59,12 @@ public sealed class SearchMatcher
                 options |= RegexOptions.IgnoreCase;
             }
 
-            _regex = new Regex(pattern, options, Timeout);
+            _regex = UserRegex.Create(pattern, options);
         }
     }
+
+    /// <summary>The regular expression timed out too often on this log and no longer matches anything (NFR-10).</summary>
+    public bool TooSlow => _regex?.TooSlow == true;
 
     public bool IsMatch(LogEvent e)
     {
@@ -73,14 +75,7 @@ public sealed class SearchMatcher
     public bool Matches(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        try
-        {
-            return _regex is null ? text.Contains(_text, _comparison) : _regex.IsMatch(text);
-        }
-        catch (RegexMatchTimeoutException)
-        {
-            return false;
-        }
+        return _regex is null ? text.Contains(_text, _comparison) : _regex.IsMatch(text);
     }
 
     /// <summary>Non-empty ranges of <paramref name="text"/> that match (at most 64), for highlighting.</summary>
@@ -105,9 +100,9 @@ public sealed class SearchMatcher
                     from = at + Math.Max(1, _text.Length);
                 }
             }
-            else
+            else if (!_regex.TooSlow)
             {
-                foreach (Match m in _regex.Matches(text))
+                foreach (Match m in _regex.Regex.Matches(text))
                 {
                     if (m.Length > 0)
                     {
@@ -122,7 +117,8 @@ public sealed class SearchMatcher
         }
         catch (RegexMatchTimeoutException)
         {
-            // highlight nothing rather than hang
+            _regex?.NoteTimeout(); // highlight nothing rather than hang
+            ranges.Clear();
         }
 
         return ranges;

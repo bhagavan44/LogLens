@@ -28,12 +28,19 @@ public sealed class PlainTextLogParser
     private static readonly Regex ExceptionHeader = new("^" + ExceptionHeaderPattern, RegexOptions.CultureInvariant | RegexOptions.Compiled, TimeSpan.FromSeconds(2));
 
     private readonly LinePattern _pattern;
+    private int _timeouts;
 
     /// <param name="pattern">The event lines to recognise; Serilog's default file template when null.</param>
     public PlainTextLogParser(LinePattern? pattern = null)
     {
         _pattern = pattern ?? SerilogText.OutputTemplate.Default.Pattern;
     }
+
+    /// <summary>
+    /// The pattern timed out on too many lines of this log (<see cref="Filtering.UserRegex.MaxTimeouts"/>), so later lines are no longer tried and
+    /// read as continuation lines: a pathological expression ends the load instead of stalling it for hours (NFR-10).
+    /// </summary>
+    public bool PatternTooSlow => Volatile.Read(ref _timeouts) >= Filtering.UserRegex.MaxTimeouts;
 
     public ParseResult Parse(string text, string? sourceFile = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
@@ -95,7 +102,7 @@ public sealed class PlainTextLogParser
                 progress?.Report((double)pos / text.Length);
             }
 
-            if (_pattern.TryRead(text, lineStart, lineEnd, out var fields))
+            if (IsEventLine(text, lineStart, lineEnd, out var fields))
             {
                 Flush();
                 state.Begin(lineStart, lineEnd, fields);
@@ -146,6 +153,27 @@ public sealed class PlainTextLogParser
                 state.Reset();
             }
         }
+    }
+
+    private bool IsEventLine(string text, int start, int end, out LineFields fields)
+    {
+        if (PatternTooSlow)
+        {
+            fields = default;
+            return false;
+        }
+
+        if (_pattern.TryRead(text, start, end, out fields, out var timedOut))
+        {
+            return true;
+        }
+
+        if (timedOut)
+        {
+            Interlocked.Increment(ref _timeouts);
+        }
+
+        return false;
     }
 
     /// <summary>True when the line starts an event of this pattern (used by format detection, FR-F1).</summary>

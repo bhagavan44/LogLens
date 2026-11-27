@@ -21,6 +21,9 @@ public sealed partial class LogViewModel
     private CancellationTokenSource? _queueCancellation;
     private Task _lastQueuedApply = Task.CompletedTask;
     private CompiledQuery? _lastGoodQuery;
+    private CompiledQuery? _appliedQuery;
+    private FilterSpec? _appliedSpec;
+    private string? _slowQueryText;
     private TimeRange _timeRange = TimeRange.Open;
     private bool _suspendApply;
     private bool _syncingLevels;
@@ -431,6 +434,12 @@ public sealed partial class LogViewModel
             QueryError = null;
             query = _lastGoodQuery = null;
         }
+        else if (QueryText == _slowQueryText)
+        {
+            // Its regular expression was too slow on this log (NFR-10): treated like an invalid query until it is changed.
+            QueryError = UserRegex.TooSlowMessage;
+            query = _lastGoodQuery;
+        }
         else if (QueryParser.TryParse(QueryText, Zone, out query, out var error))
         {
             QueryError = null;
@@ -454,6 +463,50 @@ public sealed partial class LogViewModel
             Hide = CompileHideRules(),
         };
     }
+
+    /// <summary>
+    /// Drops every regular expression of <paramref name="spec"/> that timed out too often on this log (NFR-10): a query keeps the last one that
+    /// worked and says why, the find text is rejected like an invalid one, and a hide rule is skipped with a notice. True when one was dropped,
+    /// so the pass must run again.
+    /// </summary>
+    private bool RejectSlowExpressions(FilterSpec spec)
+    {
+        var rejected = false;
+        if (spec.Query is { TooSlow: true } slow)
+        {
+            _slowQueryText = slow.Text;
+            if (ReferenceEquals(_lastGoodQuery, slow))
+            {
+                _lastGoodQuery = _appliedQuery is { TooSlow: false } applied && !ReferenceEquals(applied, slow) ? applied : null;
+            }
+
+            rejected = true;
+        }
+
+        if (spec.OnlyMatching is { TooSlow: true })
+        {
+            rejected |= RejectSlowSearch();
+        }
+
+        foreach (var hide in spec.Hide)
+        {
+            if (hide.TooSlow && _slowHideRules.Add(hide.Text))
+            {
+                var label = _hideRules.FirstOrDefault(r => r.Query == hide.Text)?.Label ?? hide.Text;
+                NoticeRaised?.Invoke(this, new Notice(
+                    NoticeSeverity.Warning,
+                    "Hide rule skipped",
+                    $"The hide rule \"{label}\" is too slow on this log (its regular expression timed out), so it isn't applied."));
+                rejected = true;
+            }
+        }
+
+        return rejected;
+    }
+
+    /// <summary>True when a regular expression of <paramref name="spec"/> has timed out too often, e.g. on events that arrived since its pass.</summary>
+    private static bool HasSlowExpression(FilterSpec spec)
+        => spec.Query?.TooSlow == true || spec.OnlyMatching?.TooSlow == true || spec.Hide.Any(h => h.TooSlow);
 
     private void QueueApply(TimeSpan? delay = null)
     {
@@ -514,30 +567,43 @@ public sealed partial class LogViewModel
         BeginPass();
         try
         {
-            var spec = BuildSpec();
-            var predicate = spec.BuildPredicate();
-            IsFiltering = predicate is not null;
-            var clock = System.Diagnostics.Stopwatch.StartNew();
-
-            // "Only matches" with context: the matches plus the events around them, counted among the events the other filters leave.
-            var matcher = spec.OnlyMatching;
-            var context = matcher is not null ? ContextEvents : 0;
-            var contextBase = context > 0 ? (spec with { OnlyMatching = null }).BuildPredicate() : null;
-
-            int[]? indices = null;
-            if (predicate is not null)
+            FilterSpec spec;
+            Func<LogEvent, bool>? predicate;
+            System.Diagnostics.Stopwatch clock;
+            int context;
+            int[]? indices;
+            do
             {
-                var events = Document.Events;
-                indices = await Task.Run(
-                    () => context > 0 && matcher is not null
-                        ? ContextExpander.Compute(events, contextBase, matcher.IsMatch, context, token)
-                        : LogEventView.ComputeIndices(events, predicate, token),
-                    token);
-            }
+                spec = BuildSpec();
+                predicate = spec.BuildPredicate();
+                IsFiltering = predicate is not null;
+                clock = System.Diagnostics.Stopwatch.StartNew();
 
-            token.ThrowIfCancellationRequested();
+                // "Only matches" with context: the matches plus the events around them, counted among the events the other filters leave.
+                var matcher = spec.OnlyMatching;
+                context = matcher is not null ? ContextEvents : 0;
+                var contextBase = context > 0 ? (spec with { OnlyMatching = null }).BuildPredicate() : null;
+
+                indices = null;
+                if (predicate is not null)
+                {
+                    var events = Document.Events;
+                    var filter = predicate;
+                    var around = context;
+                    indices = await Task.Run(
+                        () => around > 0 && matcher is not null
+                            ? ContextExpander.Compute(events, contextBase, matcher.IsMatch, around, token)
+                            : LogEventView.ComputeIndices(events, filter, token),
+                        token);
+                }
+
+                token.ThrowIfCancellationRequested();
+            }
+            while (RejectSlowExpressions(spec)); // a regular expression gave up part way, so the result is incomplete: filter again without it
 
             var keep = SelectedEvent;
+            _appliedSpec = spec;
+            _appliedQuery = spec.Query;
             _activePredicate = predicate;
             _contextActive = context > 0;
 

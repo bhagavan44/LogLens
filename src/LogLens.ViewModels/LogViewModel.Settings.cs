@@ -13,6 +13,9 @@ public sealed partial class LogViewModel
 {
     private IReadOnlyList<HideRule> _hideRules = [];
 
+    // Queries of hide rules whose regular expression was too slow on this log (NFR-10): left out of later passes.
+    private readonly HashSet<string> _slowHideRules = new(StringComparer.Ordinal);
+
     // ------------------------------------------------------------------ timestamps (FR-G5, FR-P3)
 
     /// <summary>The zone and format timestamps are shown in. The time filter, the query bar, the timeline and Go to read times in the same zone.</summary>
@@ -109,7 +112,7 @@ public sealed partial class LogViewModel
 
         foreach (var rule in _hideRules)
         {
-            if (rule.Enabled && QueryParser.TryParse(rule.Query, Zone, out var query, out _) && query is not null)
+            if (rule.Enabled && !_slowHideRules.Contains(rule.Query) && QueryParser.TryParse(rule.Query, Zone, out var query, out _) && query is not null)
             {
                 compiled.Add(query);
             }
