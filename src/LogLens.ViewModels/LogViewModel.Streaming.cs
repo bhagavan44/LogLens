@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using LogLens.Core.Diagnostics;
 using LogLens.Core.Models;
 using LogLens.Core.Streaming;
 
@@ -131,7 +132,10 @@ public sealed partial class LogViewModel : IDisposable
     /// <summary>Something the user should know about: the file was read again, the log rolled over, reading stopped.</summary>
     public event EventHandler<Notice>? NoticeRaised;
 
-    /// <summary>The stream failed: the file could not be read (missing, access denied …).</summary>
+    /// <summary>
+    /// The stream failed: the file could not be read (missing, access denied …), or reading it hit an unexpected error (a bug), which ends the
+    /// read the same way rather than leaving it hanging.
+    /// </summary>
     public event EventHandler<Exception>? StreamFailed;
 
     /// <summary>
@@ -161,8 +165,9 @@ public sealed partial class LogViewModel : IDisposable
         {
             // closed, or the load was stopped: keep what has been read
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException or ArgumentException or NotSupportedException)
+        catch (Exception ex) when (!CrashPolicy.IsCorrupting(ex))
         {
+            // A read error (missing, access denied …) or an unexpected one: either way reading ends, what was read stays, and the user is told.
             StreamFailed?.Invoke(this, ex);
             if (_contentArrived)
             {
