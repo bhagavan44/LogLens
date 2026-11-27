@@ -58,7 +58,11 @@
             </TabView.TabStripFooter>
         </TabView>
 
-        <MenuBar Grid.Row="1">
+        <!-- Shorter than the default 40 px (and 4 px item margins), so the filter bar sits close under the menu. -->
+        <MenuBar Grid.Row="1" MinHeight="30">
+            <MenuBar.Resources>
+                <Thickness x:Key="MenuBarItemMargin">4,2,4,2</Thickness>
+            </MenuBar.Resources>
             <MenuBarItem Title="File">
                 <MenuFlyoutItem Text="Open…" Click="OnOpen">
                     <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8E5;" /></MenuFlyoutItem.Icon>
