@@ -36,8 +36,36 @@
             TabItemsChanged="OnTabItemsChanged"
             AutomationProperties.Name="Open logs">
             <TabView.Resources>
-                <!-- Tabs sit on the bottom edge of the strip. -->
-                <Thickness x:Key="TabViewHeaderPadding">8,8,8,0</Thickness>
+                <ResourceDictionary>
+                    <!--
+                        On Mica the selected tab's fill barely differs from the strip, so the tab in front is outlined in the accent colour
+                        (the template's outline brush) on its top, left and right. Like the default, the sides fade out over the bottom 4 px
+                        into the strip: the offset is in px of the 31 px high tab (32 minus the 1 px margin).
+                    -->
+                    <ResourceDictionary.ThemeDictionaries>
+                        <ResourceDictionary x:Key="Light">
+                            <LinearGradientBrush x:Key="TabViewSelectedItemBorderBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,31">
+                                <GradientStop Offset="0" Color="{ThemeResource SystemAccentColorDark1}" />
+                                <GradientStop Offset="0.87" Color="{ThemeResource SystemAccentColorDark1}" />
+                                <GradientStop Offset="0.87" Color="Transparent" />
+                            </LinearGradientBrush>
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="Dark">
+                            <LinearGradientBrush x:Key="TabViewSelectedItemBorderBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,31">
+                                <GradientStop Offset="0" Color="{ThemeResource SystemAccentColorLight2}" />
+                                <GradientStop Offset="0.87" Color="{ThemeResource SystemAccentColorLight2}" />
+                                <GradientStop Offset="0.87" Color="Transparent" />
+                            </LinearGradientBrush>
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="HighContrast">
+                            <SolidColorBrush x:Key="TabViewSelectedItemBorderBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                        </ResourceDictionary>
+                    </ResourceDictionary.ThemeDictionaries>
+
+                    <!-- Tabs sit on the bottom edge of the strip. -->
+                    <Thickness x:Key="TabViewHeaderPadding">8,8,8,0</Thickness>
+                    <Thickness x:Key="TabViewSelectedItemBorderThickness">2,2,2,0</Thickness>
+                </ResourceDictionary>
             </TabView.Resources>
             <TabView.TabStripHeader>
                 <!-- Decoded at display size (Logical = scale-aware) so the downscale stays sharp. -->
