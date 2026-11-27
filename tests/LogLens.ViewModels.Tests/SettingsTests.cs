@@ -157,7 +157,7 @@ public class HideRuleViewModelTests
     {
         var streams = new FakeStreams();
         var stream = streams.Waits(@"C:\logs\tail.txt");
-        var main = TestSupport.Main(streams);
+        var main = TestSupport.CreateMain(streams);
         var open = main.OpenAsync([@"C:\logs\tail.txt"]);
         stream.Write(TestSupport.Line(1), initialLoadComplete: true);
         await open;
@@ -229,7 +229,7 @@ public class TailByDefaultTests
     {
         var streams = new FakeStreams();
         streams.Returns(Path1);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
         vm.TailByDefault = true;
 
         await vm.OpenAsync([Path1]);
@@ -243,7 +243,7 @@ public class TailByDefaultTests
     {
         var streams = new FakeStreams();
         streams.Returns(Path1);
-        var vm = TestSupport.Main(streams);
+        var vm = TestSupport.CreateMain(streams);
 
         await vm.OpenAsync([Path1]);
 

@@ -32,7 +32,7 @@ internal static class TestSupport
     }
 
     /// <summary>A main view-model over fake streams and an in-memory state file.</summary>
-    public static MainViewModel Main(FakeStreams streams, MemoryStateStore? store = null)
+    public static MainViewModel CreateMain(FakeStreams streams, MemoryStateStore? store = null)
     {
         store ??= new MemoryStateStore();
         return new MainViewModel(streams, new RecentFilesService(store), new SessionService(store), new BookmarkService(store));
