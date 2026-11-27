@@ -48,6 +48,74 @@ public class TextStoreTests
 
         Assert.Equal(5, store.LineNumberAt(store.Length - 1)); // the index is rebuilt after an append
     }
+
+    [Fact]
+    public void Ascii_text_is_stored_in_one_byte_per_character()
+    {
+        var store = new TextStore();
+        store.Append("2026-11-13 08:00:00.012 +05:30 [INF] one\n");
+        store.Append("2026-11-13 08:00:01.000 +05:30 [INF] two\n");
+
+        Assert.Equal(store.Length, store.StoredBytes);
+        Assert.Equal("[INF] two", store.Substring(store.Length - 10, 9));
+    }
+
+    [Fact]
+    public void Non_ascii_text_comes_back_exactly_and_keeps_its_offsets()
+    {
+        var store = new TextStore();
+        var ascii = new string('a', 300 * 1024);
+        store.Append(ascii);                          // an ASCII chunk
+        store.Append("Grüße — 東京 😀\nend");         // a chunk with other text: kept as a string
+        store.Append("\ntail");                       // merged into it
+
+        Assert.Equal(3, store.LineNumberAt(store.Length - 1));
+        Assert.Equal("aaGrüße — 東京 😀\nend\ntail", store.Substring(ascii.Length - 2, (int)(store.Length - ascii.Length + 2)));
+        Assert.Equal("東京", store.Substring(ascii.Length + 8, 2));
+        Assert.True(store.StoredBytes > store.Length);
+    }
+
+    [Fact]
+    public void Non_ascii_text_appended_to_an_ascii_chunk_is_merged_without_changing_it()
+    {
+        var store = new TextStore();
+        store.Append("plain line\n");
+        store.Append("café ☕\n");
+        store.Append("plain again\n");
+
+        Assert.Equal(1, store.ChunkCount);
+        Assert.Equal("plain line\ncafé ☕\nplain again\n", store.Substring(0, (int)store.Length));
+        Assert.Equal(3, store.LineNumberAt(store.Length - 2));
+    }
+
+    [Fact]
+    public void A_range_across_ascii_and_other_chunks_is_stitched_together()
+    {
+        var store = new TextStore();
+        var big = new string('b', 300 * 1024);
+        store.Append("über ");
+        store.Append(big);
+        store.Append("ünd");
+
+        Assert.Equal(3, store.ChunkCount);
+        Assert.Equal("über bb", store.Substring(0, 7));
+        Assert.Equal("bbünd", store.Substring(store.Length - 5, 5));
+        Assert.Equal("über " + big + "ünd", store.Substring(0, (int)store.Length));
+    }
+
+    [Fact]
+    public void Clearing_forgets_every_chunk()
+    {
+        var store = new TextStore();
+        store.Append("one\n");
+        store.Append("twö\n");
+        store.Clear();
+        store.Append("x\ny");
+
+        Assert.Equal(3, store.Length);
+        Assert.Equal(2, store.LineNumberAt(2));
+        Assert.Equal("x\ny", store.Substring(0, 3));
+    }
 }
 
 public class LogDocumentTests
