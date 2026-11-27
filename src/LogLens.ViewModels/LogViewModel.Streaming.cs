@@ -413,6 +413,20 @@ public sealed partial class LogViewModel : IDisposable
             ScheduleAnalysis(AnalysisThrottle);
         }
 
+        // A regular expression that gave up on the new events (NFR-10) is dropped by a fresh pass, which also says why. Checked even when no row
+        // was added: the filter may have left out every new event because its expression gave up.
+        if (change.Removed > 0 || change.Added > 0)
+        {
+            if (_appliedSpec is { } applied && HasSlowExpression(applied))
+            {
+                QueueApply();
+            }
+            else if (CurrentMatcher is { TooSlow: true })
+            {
+                _lastScheduledSearch = RecomputeMatchesAsync();
+            }
+        }
+
         if (IsLoading)
         {
             LoadProgress = chunk.FileLength > 0 ? Math.Min(1, (double)chunk.BytesRead / chunk.FileLength) : 0;

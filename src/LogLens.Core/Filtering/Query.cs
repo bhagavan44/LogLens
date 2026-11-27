@@ -10,11 +10,19 @@ namespace LogLens.Core.Filtering;
 public readonly record struct QueryError(int Position, int Length, string Message);
 
 /// <summary>A successfully compiled query.</summary>
-public sealed class CompiledQuery(string text, Func<LogEvent, bool> predicate)
+/// <param name="text">The query as typed.</param>
+/// <param name="predicate">Tests an event; thread-safe.</param>
+/// <param name="expressions">The regular expressions it runs (<c>like</c>, <c>matches</c>), so <see cref="TooSlow"/> can tell when one gave up.</param>
+public sealed class CompiledQuery(string text, Func<LogEvent, bool> predicate, IReadOnlyList<UserRegex>? expressions = null)
 {
+    private readonly IReadOnlyList<UserRegex> _expressions = expressions ?? [];
+
     public string Text { get; } = text;
 
     public Func<LogEvent, bool> Predicate { get; } = predicate;
+
+    /// <summary>One of its regular expressions timed out too often and no longer matches anything (NFR-10): the results are not to be trusted.</summary>
+    public bool TooSlow => _expressions.Any(e => e.TooSlow);
 }
 
 /// <summary>
@@ -44,7 +52,7 @@ public static class QueryParser
             var tokens = Lexer.Tokenize(text);
             var parser = new Parser(tokens, zone);
             var predicate = parser.ParseAll();
-            query = new CompiledQuery(text, predicate);
+            query = new CompiledQuery(text, predicate, parser.Expressions);
             return true;
         }
         catch (QueryException ex)
@@ -213,7 +221,11 @@ public static class QueryParser
 
     private sealed class Parser(List<Token> tokens, TimestampZone zone)
     {
+        private readonly List<UserRegex> _expressions = [];
         private int _p;
+
+        /// <summary>The regular expressions compiled so far.</summary>
+        public IReadOnlyList<UserRegex> Expressions => _expressions;
 
         private Token Peek => tokens[_p];
 
@@ -688,10 +700,10 @@ public static class QueryParser
                     return e => get(e) is { } v && v.EndsWith(value, StringComparison.OrdinalIgnoreCase);
                 case "like":
                     var like = BuildRegex(LikeToRegex(value), s.Token, ignoreCase: true);
-                    return e => get(e) is { } v && IsMatch(like, v);
+                    return e => get(e) is { } v && like.IsMatch(v);
                 default: // matches
                     var regex = BuildRegex(value, s.Token, ignoreCase: true);
-                    return e => get(e) is { } v && IsMatch(regex, v);
+                    return e => get(e) is { } v && regex.IsMatch(v);
             }
         }
 
@@ -732,19 +744,7 @@ public static class QueryParser
             _ => null,
         };
 
-        private static bool IsMatch(Regex regex, string text)
-        {
-            try
-            {
-                return regex.IsMatch(text);
-            }
-            catch (RegexMatchTimeoutException)
-            {
-                return false;
-            }
-        }
-
-        private Regex BuildRegex(string pattern, Token token, bool ignoreCase)
+        private UserRegex BuildRegex(string pattern, Token token, bool ignoreCase)
         {
             try
             {
@@ -754,7 +754,9 @@ public static class QueryParser
                     options |= RegexOptions.IgnoreCase;
                 }
 
-                return new Regex(pattern, options, TimeSpan.FromSeconds(2));
+                var regex = UserRegex.Create(pattern, options);
+                _expressions.Add(regex);
+                return regex;
             }
             catch (ArgumentException ex)
             {
