@@ -3,20 +3,22 @@
 A fast, offline log viewer for Windows. LogLens turns a text log into a filterable, searchable
 grid, follows logs while they are being written, and never changes the files it opens.
 
-> **Status: early development.** LogLens reads the files written by [Serilog](https://serilog.net):
-> text with the default template
-> (`{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}`) or your
-> own output template, compact JSON (CLEF) and classic JSON. It also reads text logs written by
-> [NLog](https://nlog-project.org) and [log4net](https://logging.apache.org/log4net/), and any text log
-> you can describe with a regular expression, on this PC, a Windows share or an SSH server. See the
-> [roadmap](SPEC.md#8-roadmap) for what comes next.
+LogLens reads the files written by [Serilog](https://serilog.net): text with the default template
+(`{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}`) or your own
+output template, compact JSON (CLEF) and classic JSON. It also reads text logs written by
+[NLog](https://nlog-project.org) and [log4net](https://logging.apache.org/log4net/), and any text log you
+can describe with a regular expression, on this PC, a Windows share or an SSH server. See the
+[changelog](CHANGELOG.md) for what each release added and the [roadmap](SPEC.md#8-roadmap) for what comes
+next.
 
 ## Install
 
-LogLens will ship as a single portable exe: no installer, no administrator rights, and no .NET or
-Windows App SDK to install first. Download `LogLens-<version>-win-x64.exe` (or `-win-arm64.exe`)
-from the [releases page](https://github.com/bhagavan44/LogLens/releases) once the first version is
-out.
+LogLens is a single portable exe: no installer, no administrator rights, and no .NET or Windows App
+SDK to install first. Download `LogLens-<version>-win-x64.exe` (or `-win-arm64.exe`) from the
+[releases page](https://github.com/bhagavan44/LogLens/releases) and run it from any folder.
+
+The exe is not code-signed yet, so Windows SmartScreen may warn the first time you start it: choose
+*More info ▸ Run anyway*.
 
 Requires Windows 10 version 1809 or later, or Windows 11.
 

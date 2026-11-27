@@ -9,8 +9,10 @@ is the source of truth for scope, requirement IDs (FR- / NFR- / UX-) and the rel
 [README.md](README.md) is the user guide and ships with releases. [CONTRIBUTING.md](CONTRIBUTING.md)
 covers the contributor workflow.
 
-v1 supports **Serilog's default plain-text template only**. Other formats come after v1.0, but the
-code must stay ready for them (see *Formats* below).
+LogLens reads Serilog text (default or custom template), CLEF and classic JSON, NLog, log4net and
+custom regular-expression formats, locally, from Windows shares and over SSH/SFTP (see the
+[changelog](CHANGELOG.md)). More formats are planned (SPEC.md §2, F8), so keep every format behind
+the format interface (see *Formats* below).
 
 ## Stack
 

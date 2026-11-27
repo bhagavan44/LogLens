@@ -1,6 +1,6 @@
 # LogLens — Product & Technical Spec
 
-**Status:** Draft v0.1 · **Platform:** Windows 10 (1809+) / Windows 11 desktop, WinUI 3 · **Date:** 2026-11-22
+**Status:** Living spec; current release v1.2.0 (see the [changelog](CHANGELOG.md)) · **Platform:** Windows 10 (1809+) / Windows 11 desktop, WinUI 3 · **Date:** 2026-11-27
 
 ## 1. Overview
 
@@ -8,9 +8,9 @@ LogLens is a Windows desktop application for opening, searching, filtering and l
 files. It turns raw text logs into a fast, structured, filterable grid so developers and support
 engineers can diagnose problems without grepping through text in Notepad.
 
-LogLens is built to support many log formats through pluggable parsers. **The first release
-(v1.0) supports one format: Serilog's default plain-text template** (§2). Further formats follow
-in later releases (§8).
+LogLens is built to support many log formats through pluggable parsers. The first stable round (v1.0)
+read one format, Serilog's default plain-text template; the v1.x rounds added Serilog's structured
+formats and custom templates, NLog, log4net and custom regular expressions, and remote hosts (§2, §8).
 
 ### 1.1 Goals
 
@@ -39,12 +39,12 @@ in later releases (§8).
 | Support / QA engineer | Open a log sent by a customer, find errors in a time window, export evidence |
 | Ops engineer | Tail a rolling log on a server (via RDP or a mapped share) |
 
-### 1.4 Constraints for v1
+### 1.4 Constraints for v1.0
 
 | Topic | Decision | Consequence |
 |---|---|---|
 | File size | Typically **1 MB – 30 MB** per file (≈ 10 k – 250 k events) | Whole file is parsed into memory; ~100 MB is the stress target (§5, §6.3). |
-| Format | **Serilog plain text, default template** only | One built-in parser behind the format interface; no template editor in v1. |
+| Format | **Serilog plain text, default template** only | One built-in parser behind the format interface; no template editor in v1.0 (other formats and custom templates came in v1.x, §2). |
 | Distribution | Portable single-file exe | No installer and no signing certificate. MSIX + winget later. |
 | Data sensitivity | No masking | Exports include content verbatim. |
 
@@ -289,7 +289,8 @@ statistics and export work on the common `LogEvent` model and never special-case
 │ LogEvent model · format      │   │ File loading and tailing · folder   │
 │ parsers · query engine ·     │   │ scan · settings / state stores ·    │
 │ filtering · analysis ·       │   │ diagnostics · single instance ·     │
-│ export writers               │   │ Open with registration              │
+│ export writers               │   │ Open with registration · SSH/SFTP   │
+│                              │   │ remote hosts                        │
 └──────────────────────────────┘   └─────────────────────────────────────┘
 ```
 
@@ -350,19 +351,21 @@ With `--data-dir <folder>` all of these live in `<folder>\LogLens`.
 
 ## 8. Roadmap
 
-Each release is usable on its own and is published on GitHub with a portable exe.
+Each release is usable on its own and is published on GitHub with a portable exe. The rounds below are
+planning rounds; the version numbers of the published releases come from release-please, so *Shipped in* says
+which release carried each round.
 
-| Release | Scope | Outcome |
-|---|---|---|
-| **v0.1** – Read & show | Solution, DI, theming, format interface with the Serilog text parser (multi-line exceptions), file loading, virtual grid, detail pane (message, exception, raw), level colours, open by dialog / drag-and-drop / command line, single-file publish | Open any Serilog default-template log and browse it |
-| **v0.2** – Find things | Level and time filters, find bar, query bar, quick filters, go to event / time, next / previous warning or error | Answer "what went wrong at 10:15?" |
-| **v0.3** – Live logs | Background load with progress, tail, refresh, rolling files, single instance, recent files, reopen last session | Usable as a tail tool |
-| **v0.4** – Many logs | Tabs in the title bar, open folder, merge view, bookmarks, find all containing | Follow a request across files |
-| **v0.5** – Analyse & export | Timeline, statistics, export, relative time column, newest first, wrapped messages, column layout | Feature-complete for Serilog text |
-| **v1.0** – Polish & ship | Settings dialog, saved filters, hide rules, settings export / import, Open with, `--data-dir`, crash reports, first-run hints, accessibility pass | First stable release |
-| **v1.x** – Structured formats | CLEF and classic JSON with auto-detect and a per-tab override, properties pane and property filters, Context column, custom templates | Structured logs |
-| **v1.x** – Other loggers | NLog, log4net, custom regex | Logs not written by Serilog |
-| **v1.x** – Remote hosts | Open logs over SSH / SFTP and Windows shares; remote tail | Logs on servers without RDP |
+| Release | Scope | Outcome | Shipped in |
+|---|---|---|---|
+| **v0.1** – Read & show | Solution, DI, theming, format interface with the Serilog text parser (multi-line exceptions), file loading, virtual grid, detail pane (message, exception, raw), level colours, open by dialog / drag-and-drop / command line, single-file publish | Open any Serilog default-template log and browse it | 1.0.0 |
+| **v0.2** – Find things | Level and time filters, find bar, query bar, quick filters, go to event / time, next / previous warning or error | Answer "what went wrong at 10:15?" | 1.1.0 |
+| **v0.3** – Live logs | Background load with progress, tail, refresh, rolling files, single instance, recent files, reopen last session | Usable as a tail tool | 1.1.0 |
+| **v0.4** – Many logs | Tabs in the title bar, open folder, merge view, bookmarks, find all containing | Follow a request across files | 1.1.0 |
+| **v0.5** – Analyse & export | Timeline, statistics, export, relative time column, newest first, wrapped messages, column layout | Feature-complete for Serilog text | 1.1.0 |
+| **v1.0** – Polish & ship | Settings dialog, saved filters, hide rules, settings export / import, Open with, `--data-dir`, crash reports, first-run hints, accessibility pass | First stable release | 1.1.0 |
+| **v1.x** – Structured formats | CLEF and classic JSON with auto-detect and a per-tab override, properties pane and property filters, Context column, custom templates | Structured logs | 1.1.0 |
+| **v1.x** – Other loggers | NLog, log4net, custom regex | Logs not written by Serilog | 1.2.0 |
+| **v1.x** – Remote hosts | Open logs over SSH / SFTP and Windows shares; remote tail | Logs on servers without RDP | 1.2.0 |
 
 ## 9. Future ideas
 
