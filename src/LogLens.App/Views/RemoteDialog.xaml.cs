@@ -15,7 +15,8 @@ namespace LogLens.App.Views;
 /// <summary>
 /// File ▸ Open from remote host (FR-O7): the saved hosts (and those in <c>~/.ssh/config</c>), adding and editing them, connecting —
 /// including the password, passphrase and host-key questions, asked right here because only one dialog can be open at a time — and
-/// browsing the host's folders to pick files. Browsing state lives in <see cref="RemoteBrowserViewModel"/>; this class only shows it.
+/// browsing the host's folders to pick files. The host list lives in <see cref="RemoteHostsViewModel"/> and browsing state in
+/// <see cref="RemoteBrowserViewModel"/>; this class only shows them.
 /// </summary>
 public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
 {
@@ -35,14 +36,10 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
         Browse,
     }
 
-    private sealed record HostItem(RemoteHost Host, bool FromConfig);
-
     private readonly SftpConnections _connections;
     private readonly IHostKeyTrust _trust;
-    private readonly Action<IReadOnlyList<RemoteHost>> _saveHosts;
+    private readonly RemoteHostsViewModel _hosts;
     private readonly Func<Task<string?>> _pickKeyFile;
-    private readonly IReadOnlyList<RemoteHost> _configHosts;
-    private readonly List<RemoteHost> _saved;
     private readonly string _initialPatterns;
 
     private Stage _stage;
@@ -56,6 +53,7 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
     private CancellationTokenSource? _subFolders;
     private bool _closed;
     private bool _clearingFilter;
+    private bool _showingHosts;
 
     public RemoteDialog(
         IReadOnlyList<RemoteHost> savedHosts,
@@ -66,15 +64,13 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
         string patterns,
         Func<Task<string?>> pickKeyFile)
     {
-        _saved = [.. savedHosts];
-        _configHosts = configHosts;
+        _hosts = new RemoteHostsViewModel(savedHosts, configHosts, saveHosts);
         _connections = connections;
         _trust = trust;
-        _saveHosts = saveHosts;
         _initialPatterns = patterns;
         _pickKeyFile = pickKeyFile;
         InitializeComponent();
-        RebuildHosts(select: null);
+        ShowHosts();
         ShowStage(Stage.Hosts);
     }
 
@@ -152,7 +148,7 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
                 Finish(Result.Tabs);
                 return; // let the dialog close
             case Stage.Hosts:
-                if (HostList.SelectedItem is ListViewItem { Tag: HostItem item })
+                if (_hosts.Selected is { } item)
                 {
                     _ = ConnectAsync(item.Host);
                 }
@@ -206,80 +202,72 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
 
     // ---------------------------------------------------------------- hosts
 
-    private void RebuildHosts(RemoteHost? select)
+    /// <summary>Shows <see cref="RemoteHostsViewModel"/>'s list, filter text, selection and the buttons that depend on it.</summary>
+    private void ShowHosts()
     {
-        // A host just saved is shown even when the filter would hide it.
-        if (select is not null && !select.Matches(HostFilterBox.Text))
+        _showingHosts = true; // clearing and refilling the list raises selection changes that are not the user's
+        try
         {
-            _clearingFilter = true;
-            HostFilterBox.Text = string.Empty;
-            _clearingFilter = false;
-        }
-
-        HostList.Items.Clear();
-        var items = _saved.Select(h => new HostItem(h, false)).ToList();
-
-        // Hosts from ~/.ssh/config, unless a saved host already has that name or points at the same login.
-        foreach (var config in _configHosts)
-        {
-            if (!_saved.Any(s => string.Equals(s.DisplayName, config.DisplayName, StringComparison.OrdinalIgnoreCase)
-                                 || (s.Kind == RemoteHostKind.Ssh && string.Equals(s.Address, config.Address, StringComparison.OrdinalIgnoreCase) && s.UserName == config.UserName && s.Port == config.Port)))
+            if (HostFilterBox.Text != _hosts.Filter)
             {
-                items.Add(new HostItem(config, true));
+                _clearingFilter = true;
+                HostFilterBox.Text = _hosts.Filter;
+                _clearingFilter = false;
             }
-        }
 
-        var total = items.Count;
-        items.RemoveAll(item => !item.Host.Matches(HostFilterBox.Text));
-
-        ListViewItem? selected = null;
-        foreach (var item in items)
-        {
-            var row = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 4, 0, 4) };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            row.Children.Add(new FontIcon { Glyph = item.Host.Kind == RemoteHostKind.Ssh ? "\uE756" : "\uE8B7", FontSize = 16, VerticalAlignment = VerticalAlignment.Center });
-            var text = new StackPanel();
-            text.Children.Add(new TextBlock { Text = item.Host.DisplayName, TextTrimming = TextTrimming.CharacterEllipsis });
-            text.Children.Add(new TextBlock { Text = item.Host.Summary, TextTrimming = TextTrimming.CharacterEllipsis, Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"], Opacity = 0.7 });
-            Grid.SetColumn(text, 1);
-            row.Children.Add(text);
-            var source = new TextBlock
+            var selected = _hosts.Selected;
+            HostList.Items.Clear();
+            ListViewItem? selectedRow = null;
+            foreach (var item in _hosts.Items)
             {
-                Text = item.FromConfig ? "~/.ssh/config" : item.Host.Kind == RemoteHostKind.Ssh ? "SSH" : "Windows share",
-                Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
-                Opacity = 0.7,
-                VerticalAlignment = VerticalAlignment.Center,
-            };
-            Grid.SetColumn(source, 2);
-            row.Children.Add(source);
-
-            var listItem = new ListViewItem { Content = row, Tag = item, HorizontalContentAlignment = HorizontalAlignment.Stretch };
-            AutomationProperties.SetName(listItem, $"{item.Host.DisplayName}, {item.Host.Summary}");
-            HostList.Items.Add(listItem);
-            if (select is not null && item.Host.Equals(select))
-            {
-                selected = listItem;
+                var row = HostRow(item);
+                HostList.Items.Add(row);
+                if (ReferenceEquals(item, selected))
+                {
+                    selectedRow = row;
+                }
             }
+
+            HostList.SelectedItem = selectedRow;
+        }
+        finally
+        {
+            _showingHosts = false;
         }
 
-        HostList.SelectedItem = selected ?? HostList.Items.FirstOrDefault();
-        NoHostsText.Text = total == 0
-            ? "No hosts yet. Add an SSH host (for example an Ubuntu server) or a Windows share."
-            : "No hosts match the filter. Change or clear it to see more hosts.";
-        NoHostsText.Visibility = Visible(HostList.Items.Count == 0);
+        NoHostsText.Text = _hosts.EmptyText;
+        NoHostsText.Visibility = Visible(_hosts.Items.Count == 0);
         UpdateHostButtons();
     }
 
-    private HostItem? SelectedHost => (HostList.SelectedItem as ListViewItem)?.Tag as HostItem;
+    private ListViewItem HostRow(RemoteHostItem item)
+    {
+        var row = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 4, 0, 4) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        row.Children.Add(new FontIcon { Glyph = item.Host.Kind == RemoteHostKind.Ssh ? "\uE756" : "\uE8B7", FontSize = 16, VerticalAlignment = VerticalAlignment.Center });
+        var text = new StackPanel();
+        text.Children.Add(new TextBlock { Text = item.Host.DisplayName, TextTrimming = TextTrimming.CharacterEllipsis });
+        text.Children.Add(new TextBlock { Text = item.Host.Summary, TextTrimming = TextTrimming.CharacterEllipsis, Style = (Style)Resources["SecondaryCaption"] });
+        Grid.SetColumn(text, 1);
+        row.Children.Add(text);
+        var source = new TextBlock { Text = item.SourceLabel, Style = (Style)Resources["SecondaryCaption"], VerticalAlignment = VerticalAlignment.Center };
+        Grid.SetColumn(source, 2);
+        row.Children.Add(source);
+
+        var listItem = new ListViewItem { Content = row, Tag = item, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        AutomationProperties.SetName(listItem, item.AccessibleName);
+        return listItem;
+    }
 
     private void OnHostFilterChanged(object sender, TextChangedEventArgs e)
     {
         if (!_clearingFilter)
         {
-            RebuildHosts(select: SelectedHost?.Host); // keeps the selected host when it still matches
+            _hosts.SetFilter(HostFilterBox.Text); // keeps the selected host when it still matches
+            ShowHosts();
         }
     }
 
@@ -300,55 +288,55 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
 
     private void UpdateHostButtons()
     {
-        var item = SelectedHost;
-        EditHostButton.IsEnabled = item is not null;
-        DuplicateHostButton.IsEnabled = item is not null;
-        RemoveHostButton.IsEnabled = item is { FromConfig: false };
+        EditHostButton.IsEnabled = _hosts.CanEdit;
+        DuplicateHostButton.IsEnabled = _hosts.CanDuplicate;
+        RemoveHostButton.IsEnabled = _hosts.CanRemove;
         if (_stage == Stage.Hosts)
         {
-            IsPrimaryButtonEnabled = item is not null;
+            IsPrimaryButtonEnabled = _hosts.CanConnect;
         }
     }
 
-    private void OnHostSelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateHostButtons();
+    private void OnHostSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_showingHosts)
+        {
+            _hosts.Select((HostList.SelectedItem as ListViewItem)?.Tag as RemoteHostItem);
+            UpdateHostButtons();
+        }
+    }
 
     private void OnHostDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
-        if (SelectedHost is { } item)
+        if (_hosts.Selected is { } item)
         {
             _ = ConnectAsync(item.Host);
         }
     }
 
-    private void OnAddHostClick(object sender, RoutedEventArgs e) => BeginEdit(null, editing: null, "Add host");
+    private void OnAddHostClick(object sender, RoutedEventArgs e) => BeginEdit(RemoteHostsViewModel.AddHost());
 
     private void OnEditHostClick(object sender, RoutedEventArgs e)
     {
-        if (SelectedHost is { } item)
+        if (_hosts.EditSelected() is { } edit)
         {
-            // A host from ~/.ssh/config is saved as a new LogLens host.
-            BeginEdit(item.Host, item.FromConfig ? null : item.Host, item.FromConfig ? "Save as a LogLens host" : "Edit host");
+            BeginEdit(edit);
         }
     }
 
     /// <summary>Opens the host form filled in with the selected host's details, saved as a new host.</summary>
     private void OnDuplicateHostClick(object sender, RoutedEventArgs e)
     {
-        if (SelectedHost is { } item)
+        if (_hosts.DuplicateSelected() is { } edit)
         {
-            var copy = item.Host.Duplicate(_saved.Concat(_configHosts).Select(h => h.DisplayName));
-            BeginEdit(copy, editing: null, "Duplicate host");
+            BeginEdit(edit);
         }
     }
 
     private void OnRemoveHostClick(object sender, RoutedEventArgs e)
     {
-        if (SelectedHost is { FromConfig: false } item)
-        {
-            _saved.Remove(item.Host);
-            _saveHosts(_saved.ToList());
-            RebuildHosts(select: null);
-        }
+        _hosts.RemoveSelected();
+        ShowHosts();
     }
 
     private void ShowHostsError(string message)
@@ -499,11 +487,12 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
 
     // ---------------------------------------------------------------- adding and editing a host
 
-    /// <summary>Shows the host form with <paramref name="host"/>'s fields; saving replaces <paramref name="editing"/>, or adds a host when null.</summary>
-    private void BeginEdit(RemoteHost? host, RemoteHost? editing, string title)
+    /// <summary>Shows the host form with <paramref name="edit"/>'s fields; saving replaces its host, or adds one when it replaces none.</summary>
+    private void BeginEdit(RemoteHostEdit edit)
     {
-        _editing = editing;
-        EditTitle.Text = title;
+        var host = edit.Host;
+        _editing = edit.Replaces;
+        EditTitle.Text = edit.Title;
         var h = host ?? new RemoteHost();
         KindBox.SelectedIndex = (int)h.Kind;
         NameBox.Text = host is null ? string.Empty : h.Name;
@@ -552,32 +541,14 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
 
     private void SaveEdit()
     {
-        var host = ReadFields();
-        var error = host.Validate();
-        if (error is null && _saved.Any(s => !ReferenceEquals(s, _editing) && string.Equals(s.DisplayName, host.DisplayName, StringComparison.OrdinalIgnoreCase)))
-        {
-            error = $"There is already a host called {host.DisplayName}.";
-        }
-
-        if (error is not null)
+        if (_hosts.Save(ReadFields(), _editing) is { } error)
         {
             EditError.Text = error;
             EditError.Visibility = Visibility.Visible;
             return;
         }
 
-        var index = _editing is null ? -1 : _saved.IndexOf(_editing);
-        if (index >= 0)
-        {
-            _saved[index] = host;
-        }
-        else
-        {
-            _saved.Add(host);
-        }
-
-        _saveHosts(_saved.ToList());
-        RebuildHosts(select: host);
+        ShowHosts();
         ShowStage(Stage.Hosts);
     }
 
@@ -697,17 +668,17 @@ public sealed partial class RemoteDialog : ContentDialog, ISshPrompt
         return item;
     }
 
-    private static ListViewItem FileRow(RemoteEntry entry)
+    private ListViewItem FileRow(RemoteEntry entry)
     {
         var row = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 2, 0, 2) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.Children.Add(new TextBlock { Text = entry.Name, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
-        var size = new TextBlock { Text = FormatSize(entry.Length), Opacity = 0.7, MinWidth = 64, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+        var size = new TextBlock { Text = FormatSize(entry.Length), Style = (Style)Resources["SecondaryText"], MinWidth = 64, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
         Grid.SetColumn(size, 1);
         row.Children.Add(size);
-        var when = new TextBlock { Text = entry.LastWriteTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture), Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center };
+        var when = new TextBlock { Text = entry.LastWriteTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture), Style = (Style)Resources["SecondaryText"], VerticalAlignment = VerticalAlignment.Center };
         Grid.SetColumn(when, 2);
         row.Children.Add(when);
         var item = new ListViewItem { Content = row, Tag = entry.Path, HorizontalContentAlignment = HorizontalAlignment.Stretch };

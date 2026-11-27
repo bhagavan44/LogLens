@@ -24,6 +24,13 @@
             <Setter Property="MinHeight" Value="26" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
+        <!-- Second-line text in the host and file rows: the theme's secondary text colour, which keeps 4.5:1 contrast and follows high contrast (UX-5) -->
+        <Style x:Key="SecondaryText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Style>
+        <Style x:Key="SecondaryCaption" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Style>
     </ContentDialog.Resources>
 
     <!-- 430 high, or less in a small window: the lists shrink so the buttons below them stay in view (see OnRootLoaded) -->
