@@ -44,8 +44,36 @@ jobs:
         shell: pwsh
         run: ./build/publish.ps1 -Runtime ${{ matrix.runtime }}
 
+      # No --clobber: winget pins each exe by SHA256, so a published exe must never be replaced.
+      # A re-run fails here instead; ship a fix as a new version.
       - name: Attach to release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ needs.release-please.outputs.tag_name }} (Get-ChildItem artifacts/LogLens-*.exe).FullName --clobber
+        run: gh release upload ${{ needs.release-please.outputs.tag_name }} (Get-ChildItem artifacts/LogLens-*.exe).FullName
+
+  # Opens a pull request on microsoft/winget-pkgs for the new version. Needs a WINGET_TOKEN secret: a
+  # personal access token with public_repo scope (GITHUB_TOKEN can't open PRs on another repo).
+  # The package must already exist in winget-pkgs; the first version was submitted by hand.
+  winget:
+    needs: [release-please, publish]
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Submit to winget
+        shell: pwsh
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          if (-not $env:WINGET_TOKEN) {
+            Write-Host '::warning::WINGET_TOKEN is not set; skipping the winget submission.'
+            exit 0
+          }
+          $version = $env:TAG.TrimStart('v')
+          $base = "https://github.com/bhagavan44/LogLens/releases/download/$env:TAG"
+          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          ./wingetcreate.exe update bhagavan44.LogLens --version $version `
+            --urls "$base/LogLens-$version-win-x64.exe|x64" "$base/LogLens-$version-win-arm64.exe|arm64" `
+            --submit --token $env:WINGET_TOKEN
+          if ($LASTEXITCODE -ne 0) { throw "wingetcreate failed ($LASTEXITCODE)" }
