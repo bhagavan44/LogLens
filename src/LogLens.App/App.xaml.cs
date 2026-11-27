@@ -71,6 +71,9 @@ public partial class App : Application
         var viewModel = window.ViewModel;
         viewModel.RemembersSession = primary;
 
+        // NFR-12: reading a log that failed with a bug (not a missing or locked file) is shown as a notice and written here.
+        viewModel.BackgroundError += (_, ex) => Log.Error(ex, "Reading a log failed unexpectedly");
+
         // "Open with" / command line: LogLens.exe [--data-dir <folder>] [--merge] [<log file> ...]; otherwise what was open last time (FR-P3).
         if (Program.CommandLine.Files.Count > 0)
         {

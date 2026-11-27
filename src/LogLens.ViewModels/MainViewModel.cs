@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using LogLens.Core.Diagnostics;
 using LogLens.Core.Formats;
 using LogLens.Core.Models;
 using LogLens.Core.Remote;
@@ -348,14 +349,25 @@ public sealed partial class MainViewModel : ObservableObject
 
         async Task WhenStoppedAsync()
         {
-            await run;
-            if (!Tabs.Contains(log))
+            try
             {
-                EndLoading(log);
-                log.Dispose(); // cancelled or failed before it showed anything
+                await run;
             }
+            catch (Exception ex) when (!CrashPolicy.IsCorrupting(ex))
+            {
+                BackgroundError?.Invoke(this, ex); // RunAsync reports read failures itself; this is a bug, so it is logged
+            }
+            finally
+            {
+                // Whatever happened, the open ends: never a spinner that stays and an await that never returns.
+                if (!Tabs.Contains(log))
+                {
+                    EndLoading(log);
+                    log.Dispose(); // cancelled or failed before it showed anything
+                }
 
-            shown.TrySetResult(null);
+                shown.TrySetResult(null);
+            }
         }
 
         void OnContentArrived(object? sender, EventArgs e)
@@ -382,6 +394,11 @@ public sealed partial class MainViewModel : ObservableObject
 
         void OnStreamFailed(object? sender, Exception ex)
         {
+            if (!IsReadError(ex is MergeSourceException { InnerException: { } inner } ? inner : ex))
+            {
+                BackgroundError?.Invoke(this, ex); // not a file problem but a bug: worth a line in the diagnostics log (NFR-12)
+            }
+
             if (Tabs.Contains(log))
             {
                 return; // reported by the log itself ("Stopped reading …")
@@ -534,6 +551,12 @@ public sealed partial class MainViewModel : ObservableObject
 
     // ------------------------------------------------------------------ notices
 
+    /// <summary>
+    /// Reading a log failed with an error that is not a file problem (a bug). The user already got a notice; the app writes this to its
+    /// diagnostics log (NFR-12).
+    /// </summary>
+    public event EventHandler<Exception>? BackgroundError;
+
     /// <summary>Something went wrong that the view could not handle; shown instead of crashing.</summary>
     public void ReportUnexpectedError(Exception exception)
     {
@@ -599,7 +622,8 @@ public sealed partial class MainViewModel : ObservableObject
                 => new Notice(NoticeSeverity.Error, "File not found", $"{path} does not exist. It may have been moved or deleted."),
             UnauthorizedAccessException or System.Security.SecurityException
                 => new Notice(NoticeSeverity.Error, "Access denied", $"You don't have permission to read {name}."),
-            _ => new Notice(NoticeSeverity.Error, $"Could not open {name}", ex.Message),
+            _ when IsReadError(ex) => new Notice(NoticeSeverity.Error, $"Could not open {name}", ex.Message),
+            _ => new Notice(NoticeSeverity.Error, $"Could not open {name}", $"Something went wrong while reading it: {ex.Message} Details are in the diagnostics log."),
         };
     }
 }
